@@ -1,0 +1,2774 @@
+<!DOCTYPE html>
+<html lang="ja" class="h-full bg-slate-950 text-slate-100 select-none">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>HexStudio - Mobile Hex Editor with Annotations</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- FontAwesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        /* Custom scrollbar */
+        ::-webkit-scrollbar {
+            width: 4px;
+            height: 4px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0f172a;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #334155;
+            border-radius: 2px;
+        }
+        
+        .hex-cell, .ascii-cell {
+            transition: background-color 0.1s ease, color 0.1s ease;
+            touch-action: manipulation;
+            position: relative;
+        }
+        .hex-cell.active, .ascii-cell.active {
+            background-color: #2563eb !important;
+            color: #ffffff !important;
+            font-weight: 700;
+            box-shadow: 0 0 8px rgba(37, 99, 235, 0.8);
+            z-index: 5;
+        }
+        .hex-cell.modified, .ascii-cell.modified {
+            color: #fbbf24;
+            font-weight: 600;
+        }
+        .hex-cell.search-match, .ascii-cell.search-match {
+            background-color: #854d0e !important;
+            color: #fef08a !important;
+        }
+        .hex-cell.search-current, .ascii-cell.search-current {
+            background-color: #d97706 !important;
+            color: #ffffff !important;
+            outline: 2px solid #fde047;
+        }
+
+        /* Mega FireRed / Charmap special-byte colors */
+        .special-space { color: #94a3b8 !important; background-color: rgba(100, 116, 139, 0.16) !important; border-bottom: none !important; }
+        .special-newline { color: #67e8f9 !important; background-color: rgba(6, 182, 212, 0.16) !important; border-bottom: none !important; font-weight: 700; }
+        .special-paragraph { color: #a78bfa !important; background-color: rgba(139, 92, 246, 0.16) !important; border-bottom: none !important; font-weight: 700; }
+        .special-scroll { color: #c084fc !important; background-color: rgba(168, 85, 247, 0.16) !important; border-bottom: none !important; font-weight: 700; }
+        .special-end { color: #fb7185 !important; background-color: rgba(244, 63, 94, 0.16) !important; border-bottom: none !important; font-weight: 700; }
+        .special-control { color: #fbbf24 !important; background-color: rgba(245, 158, 11, 0.14) !important; border-bottom: none !important; font-weight: 600; }
+        .special-macro { color: #4ade80 !important; background-color: rgba(34, 197, 94, 0.14) !important; border-bottom: none !important; font-weight: 600; }
+        
+        /* Annotation Color Preset Styles */
+        .anno-blue { background-color: rgba(37, 99, 235, 0.25); border-bottom: 2px solid #3b82f6; }
+        .anno-emerald { background-color: rgba(16, 185, 129, 0.25); border-bottom: 2px solid #10b981; }
+        .anno-amber { background-color: rgba(245, 158, 11, 0.25); border-bottom: 2px solid #f59e0b; }
+        .anno-rose { background-color: rgba(244, 63, 94, 0.25); border-bottom: 2px solid #f43f5e; }
+        .anno-purple { background-color: rgba(168, 85, 247, 0.25); border-bottom: 2px solid #a855f7; }
+        .anno-cyan { background-color: rgba(6, 182, 212, 0.25); border-bottom: 2px solid #06b6d4; }
+        .anno-indigo { background-color: rgba(99, 102, 241, 0.25); border-bottom: 2px solid #6366f1; }
+        .anno-sky { background-color: rgba(14, 165, 233, 0.25); border-bottom: 2px solid #0ea5e9; }
+        .anno-teal { background-color: rgba(20, 184, 166, 0.25); border-bottom: 2px solid #14b8a6; }
+        .anno-lime { background-color: rgba(132, 204, 22, 0.25); border-bottom: 2px solid #84cc16; }
+        .anno-yellow { background-color: rgba(234, 179, 8, 0.25); border-bottom: 2px solid #eab308; }
+        .anno-orange { background-color: rgba(249, 115, 22, 0.25); border-bottom: 2px solid #f97316; }
+        .anno-red { background-color: rgba(239, 68, 68, 0.25); border-bottom: 2px solid #ef4444; }
+        .anno-pink { background-color: rgba(236, 72, 153, 0.25); border-bottom: 2px solid #ec4899; }
+        .anno-fuchsia { background-color: rgba(217, 70, 239, 0.25); border-bottom: 2px solid #d946ef; }
+        .anno-violet { background-color: rgba(139, 92, 246, 0.25); border-bottom: 2px solid #8b5cf6; }
+        .anno-slate { background-color: rgba(100, 116, 139, 0.25); border-bottom: 2px solid #64748b; }
+        .anno-gray { background-color: rgba(107,114,128,.25); border-bottom:2px solid #6b7280; }
+        .anno-zinc { background-color: rgba(113,113,122,.25); border-bottom:2px solid #71717a; }
+        .anno-neutral { background-color: rgba(115,115,115,.25); border-bottom:2px solid #737373; }
+        .anno-stone { background-color: rgba(120,113,108,.25); border-bottom:2px solid #78716c; }
+        .anno-green { background-color: rgba(34,197,94,.25); border-bottom:2px solid #22c55e; }
+        .anno-lightblue { background-color: rgba(96,165,250,.25); border-bottom:2px solid #60a5fa; }
+        .anno-mint { background-color: rgba(52,211,153,.25); border-bottom:2px solid #34d399; }
+        .anno-gold { background-color: rgba(250,204,21,.25); border-bottom:2px solid #facc15; }
+        .anno-coral { background-color: rgba(248,113,113,.25); border-bottom:2px solid #f87171; }
+        .anno-salmon { background-color: rgba(244,114,182,.25); border-bottom:2px solid #f472b6; }
+        .anno-lavender { background-color: rgba(192,132,252,.25); border-bottom:2px solid #c084fc; }
+        .anno-periwinkle { background-color: rgba(129,140,248,.25); border-bottom:2px solid #818cf8; }
+        .anno-peach { background-color: rgba(251,146,60,.25); border-bottom:2px solid #fb923c; }
+
+        /* Range-tag coloring must not change HEX glyph metrics/position. */
+        .hex-cell[class*="anno-"] {
+            font-weight: inherit !important;
+            line-height: inherit !important;
+            transform: none !important;
+            border-bottom: none !important;
+            text-decoration: none !important;
+        }
+
+        /* Multiple Overlapping Tags Indicator */
+        .anno-multi { outline: 1px dashed rgba(255, 255, 255, 0.4); outline-offset: -1px; }
+
+        /* Prevent elastic bounce on iOS */
+        body, html {
+            overscroll-behavior: none;
+            position: fixed;
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body class="h-full flex flex-col font-sans bg-slate-950 text-slate-200 overflow-hidden">
+
+    <header class="h-12 md:h-14 bg-slate-900 border-b border-slate-800 flex items-center justify-between px-3 md:px-4 shrink-0 z-20">
+        <div class="flex items-center gap-2">
+            <div class="flex items-center gap-1.5 text-blue-400 font-bold text-base md:text-lg">
+                <i class="fa-solid fa-microchip"></i>
+                <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">PowHex</span>
+            </div>
+            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Mobile</span>
+        </div>
+
+        <!-- Header Controls -->
+        <div class="flex items-center gap-1.5 md:gap-2">
+            <!-- Zoom Controls -->
+            <div class="flex items-center bg-slate-800 rounded border border-slate-700 text-xs">
+                <button id="zoomOutBtn" class="px-2 py-1 hover:bg-slate-700 text-slate-300"><i class="fa-solid fa-minus text-[10px]"></i></button>
+                <span id="zoomLabel" class="px-1 text-[11px] font-mono text-slate-400">100%</span>
+                <button id="zoomInBtn" class="px-2 py-1 hover:bg-slate-700 text-slate-300"><i class="fa-solid fa-plus text-[10px]"></i></button>
+            </div>
+
+            <!-- Open File -->
+            <label for="fileInput" class="flex items-center gap-1.5 px-2.5 py-1.5 bg-blue-600 hover:bg-blue-500 active:bg-blue-700 text-white text-xs font-semibold rounded-md cursor-pointer transition">
+                <i class="fa-solid fa-folder-open text-xs"></i>
+                <span class="hidden sm:inline">ファイル開く</span>
+            </label>
+            <input type="file" id="fileInput" class="hidden" />
+
+            <!-- Save File -->
+            <button id="downloadBtn" disabled class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs font-semibold rounded-md border border-slate-700 transition">
+                <i class="fa-solid fa-download text-xs text-emerald-400"></i>
+                <span class="hidden sm:inline">保存</span>
+            </button>
+
+            <!-- Sample Data -->
+            <button id="demoBtn" class="p-1.5 md:px-2.5 md:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-700 transition" title="サンプルファイル読み込み">
+                <i class="fa-solid fa-vial text-amber-400"></i>
+            </button>
+        </div>
+    </header>
+
+    <div class="flex-1 flex overflow-hidden relative">
+        
+        <aside id="sidebarPanel" class="hidden md:flex w-full md:w-80 bg-slate-900 border-r border-slate-800 flex-col shrink-0 overflow-y-auto absolute md:relative inset-0 z-10">
+            
+            <!-- Mobile Panel Header -->
+            <div class="flex md:hidden items-center justify-between p-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-10">
+                <span id="mobileTabTitle" class="font-bold text-sm text-blue-400 flex items-center gap-2">
+                    <i class="fa-solid fa-tags"></i> Annotation
+                </span>
+                <button id="closeMobileTabBtn" class="px-2.5 py-1 bg-slate-800 rounded border border-slate-700 text-xs text-slate-300">
+                    <i class="fa-solid fa-xmark"></i> 閉じる
+                </button>
+            </div>
+
+            <!-- ANNOTATIONS TAB CONTENT -->
+            <div id="panelAnnotations" class="p-3 md:p-4 border-b border-slate-800 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-tags text-purple-400"></i> Tag
+                    </h3>
+                    <div class="flex items-center gap-1.5">
+                        <span id="annoStorageStatus" class="text-[9px] text-emerald-400">自動保存</span>
+                        <button id="clearAnnoStorageBtn" title="このファイルの保存タグを削除" class="text-[10px] bg-slate-800 hover:bg-slate-700 px-2 py-1 rounded border border-slate-700 text-slate-400">
+                            <i class="fa-solid fa-trash-can"></i> 保存削除
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Global All ON / All OFF Buttons -->
+                <div class="flex gap-2">
+                    <button id="allAnnoOnBtn" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-blue-400 border border-slate-700 rounded text-xs font-medium flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-eye text-[10px]"></i> すべてON
+                    </button>
+                    <button id="allAnnoOffBtn" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 text-slate-400 border border-slate-700 rounded text-xs font-medium flex items-center justify-center gap-1">
+                        <i class="fa-solid fa-eye-slash text-[10px]"></i> すべてOFF
+                    </button>
+                </div>
+
+                <!-- Add New Annotation Form -->
+                <div class="bg-slate-950 p-3 rounded-lg border border-slate-800 space-y-2">
+                    <div class="text-xs font-semibold text-slate-300 flex items-center justify-between">
+                        <span>新規タグ作成</span>
+                        <button id="quickTagCurrentBtn" class="text-[10px] text-blue-400 hover:underline">現在の位置(0x<span id="quickTagOffset">0000</span>)を使用</button>
+                    </div>
+                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                        <div>
+                            <span class="text-[10px] text-slate-500">開始 (Hex)</span>
+                            <input type="text" id="annoStartInput" placeholder="0000" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200">
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500">終了 (Hex)</span>
+                            <input type="text" id="annoEndInput" placeholder="000F" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-slate-200">
+                        </div>
+                    </div>
+                    <div>
+                        <input type="text" id="annoLabelInput" placeholder="タグ名 (例: Header, Size...)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                    </div>
+                    <div>
+                        <input type="text" id="annoDescInput" placeholder="詳細メモ (任意)" class="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1 text-xs text-slate-200">
+                    </div>
+                    <!-- Color Picker Presets -->
+                    <div class="flex items-start justify-between pt-1 gap-2">
+                        <span class="text-[10px] text-slate-500">カラー:</span>
+                        <div class="flex gap-3 overflow-x-auto w-full max-w-[250px] py-2 snap-x items-center" id="colorPickerGroup" style="-webkit-overflow-scrolling: touch; scrollbar-width: thin;">
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-blue-500 ring-2 ring-white color-opt" data-color="blue" title="Blue"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-emerald-500 color-opt" data-color="emerald" title="Emerald"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-amber-500 color-opt" data-color="amber" title="Amber"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-rose-500 color-opt" data-color="rose" title="Rose"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-purple-500 color-opt" data-color="purple" title="Purple"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-cyan-500 color-opt" data-color="cyan" title="Cyan"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-indigo-500 color-opt" data-color="indigo" title="Indigo"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-sky-500 color-opt" data-color="sky" title="Sky"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-teal-500 color-opt" data-color="teal" title="Teal"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-lime-500 color-opt" data-color="lime" title="Lime"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-yellow-500 color-opt" data-color="yellow" title="Yellow"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-orange-500 color-opt" data-color="orange" title="Orange"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-red-500 color-opt" data-color="red" title="Red"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-pink-500 color-opt" data-color="pink" title="Pink"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-fuchsia-500 color-opt" data-color="fuchsia" title="Fuchsia"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-violet-500 color-opt" data-color="violet" title="Violet"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-slate-500 color-opt" data-color="slate" title="Slate"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-gray-500 color-opt" data-color="gray" title="Gray"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-zinc-500 color-opt" data-color="zinc" title="Zinc"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-neutral-500 color-opt" data-color="neutral" title="Neutral"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-stone-500 color-opt" data-color="stone" title="Stone"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-green-500 color-opt" data-color="green" title="Green"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-blue-400 color-opt" data-color="lightblue" title="Light Blue"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-emerald-400 color-opt" data-color="mint" title="Mint"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-yellow-400 color-opt" data-color="gold" title="Gold"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-red-400 color-opt" data-color="coral" title="Coral"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-pink-400 color-opt" data-color="salmon" title="Salmon"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-purple-400 color-opt" data-color="lavender" title="Lavender"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-indigo-400 color-opt" data-color="periwinkle" title="Periwinkle"></button>
+                            <button class="w-[22px] h-[22px] min-w-[22px] min-h-[22px] flex-none rounded-full bg-orange-400 color-opt" data-color="peach" title="Peach"></button>
+                        </div>
+                    </div>
+                    <button id="addAnnoBtn" class="w-full py-1.5 bg-purple-600 hover:bg-purple-500 active:bg-purple-700 text-white font-semibold text-xs rounded transition">
+                        <i class="fa-solid fa-plus text-[10px] mr-1"></i> アノテーション追加
+                    </button>
+                </div>
+
+                <!-- Annotation List Items Container -->
+                <div id="annoList" class="space-y-1.5 max-h-56 overflow-y-auto pr-1">
+                    <p id="noAnnoText" class="text-xs text-slate-500 text-center py-2">タグが登録されていません</p>
+                </div>
+            </div>
+
+            <!-- SEARCH & JUMP TAB CONTENT -->
+            <div id="panelSearch" class="p-3 md:p-4 border-b border-slate-800 space-y-3">
+                <!-- Jump -->
+                <div>
+                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                        <i class="fa-solid fa-arrow-right-to-line text-indigo-400"></i> オフセットジャンプ
+                    </h3>
+                    <div class="flex gap-2">
+                        <div class="relative flex-1">
+                            <span class="absolute left-2.5 top-1.5 text-xs font-mono text-slate-500">0x</span>
+                            <input type="text" id="jumpInput" placeholder="0000" class="w-full bg-slate-950 border border-slate-700 rounded pl-7 pr-2 py-1 text-xs font-mono text-slate-200 uppercase">
+                        </div>
+                        <button id="jumpBtn" class="px-3 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-200 text-xs font-medium rounded">移動</button>
+                    </div>
+                </div>
+
+                <!-- Search -->
+                <div>
+                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5 flex items-center gap-2">
+                        <i class="fa-solid fa-magnifying-glass text-amber-400"></i> 検索
+                    </h3>
+                    <div class="space-y-2">
+                        <div class="flex rounded-md shadow-sm">
+                            <button id="searchTypeHex" class="flex-1 py-1 text-xs font-medium bg-blue-600 text-white rounded-l border border-blue-600">Hex</button>
+                            <button id="searchTypeText" class="flex-1 py-1 text-xs font-medium bg-slate-800 text-slate-400 rounded-r border border-slate-700">テキスト</button>
+                    <button id="searchTypeMap" class="flex-1 py-1 text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700">MAP</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <input type="text" id="searchInput" placeholder="例: 89 50 4E 47 または PNG" class="flex-1 bg-slate-950 border border-slate-700 rounded px-2.5 py-1 text-xs font-mono text-slate-200">
+                            <button id="searchExecuteBtn" class="px-3 py-1 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded">検索</button>
+                        </div>
+                        <div class="flex gap-2">
+                            <button id="searchPrevBtn" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs rounded flex items-center justify-center gap-1">
+                                <i class="fa-solid fa-chevron-up text-[10px]"></i> 前へ
+                            </button>
+                            <button id="searchNextBtn" class="flex-1 py-1 bg-slate-800 hover:bg-slate-700 border border-slate-700 text-slate-300 text-xs rounded flex items-center justify-center gap-1">
+                                次へ <i class="fa-solid fa-chevron-down text-[10px]"></i>
+                            </button>
+                        </div>
+
+<div id="searchStats" class="text-[11px] text-slate-500 font-mono text-center">
+    一致: 0 / 0
+</div>
+
+<!-- Search Result List -->
+<div id="searchResultList"
+     style="
+        display:block;
+        width:100%;
+        max-height:50vh;
+        overflow-y:auto;
+        margin-top:6px;
+        padding-top:6px;
+        border-top:1px solid #1e293b;
+     ">
+    <div style="
+        text-align:center;
+        color:#475569;
+        font-size:10px;
+        padding:8px 0;
+    ">
+        検索結果なし
+    </div>
+</div>
+
+
+                    </div>
+                </div>
+            </div>
+
+            <!-- INSPECTOR & FILE INFO CONTENT -->
+            <div id="panelInspector" class="p-3 md:p-4 space-y-3">
+                <div class="flex items-center justify-between">
+                    <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                        <i class="fa-solid fa-sliders text-emerald-400"></i> Inspector
+                    </h3>
+                    <button id="endianToggle" class="text-[10px] font-mono font-semibold px-2 py-0.5 rounded bg-blue-950 border border-blue-800 text-blue-300 hover:bg-blue-900">
+                        Little Endian
+                    </button>
+                </div>
+
+                <!-- Active Tag Container for overlapping tags -->
+                <div id="activeTagContainer" class="hidden space-y-1.5">
+                    <!-- Dynamic multi-tag content generated by JS -->
+                </div>
+
+                <div class="grid grid-cols-2 gap-2 text-xs font-mono">
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 col-span-2 flex justify-between items-center">
+                        <span class="text-slate-500 text-[11px]">2進数 (Binary)</span>
+                        <span id="inspBinary" class="text-blue-300 text-[11px]">00000000</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 col-span-2 flex justify-between items-center">
+                        <span class="text-slate-500 text-[11px]">ASCII</span>
+                        <span id="inspAscii" class="text-emerald-300 text-[11px] font-mono truncate max-w-[75%]">.</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Int8</span>
+                        <span id="inspInt8" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Uint8</span>
+                        <span id="inspUint8" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Int16</span>
+                        <span id="inspInt16" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Uint16</span>
+                        <span id="inspUint16" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Int32</span>
+                        <span id="inspInt32" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Uint32</span>
+                        <span id="inspUint32" class="text-slate-200">0</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Float32</span>
+                        <span id="inspFloat32" class="text-slate-200">0.00</span>
+                    </div>
+                    <div class="bg-slate-950/70 p-2 rounded border border-slate-800 flex justify-between">
+                        <span class="text-slate-500">Float64</span>
+                        <span id="inspFloat64" class="text-slate-200">0.00</span>
+                    </div>
+                </div>
+
+                    <!-- Pointer Analysis -->
+                <div class="bg-slate-950/70 p-2.5 rounded border border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between">
+                        <span class="text-[11px] text-slate-400 font-bold flex items-center gap-1.5">
+                            <i class="fa-solid fa-link text-cyan-400"></i> ポインタ解析
+                        </span>
+                        <span id="inspPointerBytes" class="text-[10px] font-mono text-slate-500">-- -- -- --</span>
+                    </div>
+                    <div class="grid grid-cols-2 gap-2">
+                        <div class="bg-slate-900 rounded border border-slate-800 p-2">
+                            <div class="text-[9px] text-slate-500 mb-1">Little Endian</div>
+                            <div id="inspPointerLE" class="text-[11px] font-mono text-cyan-300 break-all">-</div>
+                            <button id="jumpPointerLEBtn" class="mt-1.5 w-full px-2 py-1 rounded bg-cyan-950 border border-cyan-800 text-cyan-300 text-[10px] hover:bg-cyan-900 disabled:opacity-40 disabled:cursor-not-allowed">ROMオフセットへ</button>
+                        </div>
+                        <div class="bg-slate-900 rounded border border-slate-800 p-2">
+                            <div class="text-[9px] text-slate-500 mb-1">Big Endian</div>
+                            <div id="inspPointerBE" class="text-[11px] font-mono text-cyan-300 break-all">-</div>
+                            <button id="jumpPointerBEBtn" class="mt-1.5 w-full px-2 py-1 rounded bg-slate-800 border border-slate-700 text-slate-300 text-[10px] hover:bg-slate-700 disabled:opacity-40 disabled:cursor-not-allowed">ROMオフセットへ</button>
+                        </div>
+                    </div>
+                    <div id="pointerHint" class="text-[9px] text-slate-500 leading-snug">GBA ROMポインタ（0x08000000〜）なら自動でROMオフセットに変換します。</div>
+                </div>
+
+                <!-- Display Options & File Info -->
+                <div class="pt-2 border-t border-slate-800 space-y-2">
+                    <div class="flex items-center justify-between text-xs">
+                        <span class="text-slate-400 font-medium">1行のバイト数:</span>
+                        <select id="bytesPerRowSelect" class="bg-slate-950 border border-slate-700 text-slate-200 text-xs rounded px-2 py-1 font-mono focus:outline-none">
+                            <option value="auto">自動 (レスポンシブ)</option>
+                            <option value="16">16 バイト</option>
+                            <option value="8" selected>8 バイト</option>
+                            <option value="4">4 バイト</option>
+                        </select>
+                    </div>
+                    <div class="text-[11px] font-mono text-slate-500 space-y-1 pt-1">
+                        <div class="flex justify-between"><span>ファイル:</span> <span id="infoFileName" class="text-slate-300 truncate max-w-[140px]">なし</span></div>
+                        <div class="flex justify-between"><span>サイズ:</span> <span id="infoFileSize" class="text-slate-300">0 Bytes</span></div>
+                        <div class="flex justify-between"><span>状態:</span> <span id="infoFileStatus" class="text-emerald-400">準備完了</span></div>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main id="dropZone" class="flex-1 flex flex-col bg-slate-950 relative overflow-hidden">
+            
+            <!-- Drag Overlay -->
+            <div id="dropOverlay" class="hidden absolute inset-0 bg-blue-900/50 border-2 border-dashed border-blue-400 z-50 flex items-center justify-center backdrop-blur-sm pointer-events-none">
+                <div class="text-center">
+                    <i class="fa-solid fa-cloud-arrow-up text-5xl text-blue-300 mb-2 animate-bounce"></i>
+                    <p class="text-base font-bold text-white">バイナリファイルをドロップ</p>
+                </div>
+            </div>
+
+            <!-- Hex Display Mode -->
+            <div class="h-8 bg-slate-950 border-b border-slate-800 flex items-center justify-end px-2 gap-1 shrink-0">
+                <span class="text-[9px] text-slate-600 mr-1">右側表示</span>
+                <button id="hexDisplayAsciiBtn" class="text-[9px] font-semibold px-2 py-1 rounded bg-blue-950 border border-blue-700 text-blue-300">ASCII</button>
+                <button id="hexDisplayCharmapBtn" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">MAP</button>
+                <button id="hexSpecialColorBtn" title="00/FE/FB/FA/FF/FC/FD/F8/F9 を意味別に色分け" class="text-[9px] font-semibold px-2 py-1 rounded bg-amber-950 border border-amber-700 text-amber-300">制御色 ON</button>
+                <button id="hexAnnotationToggleBtn" title="範囲タグの色表示をON/OFF" class="text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300">Tag ON</button>
+            </div>
+
+            <!-- Dynamic Header Bar for Bytes Columns -->
+            <div id="hexHeaderBar" class="h-7 bg-slate-900/90 border-b border-slate-800 flex items-center px-2 md:px-4 font-mono text-[11px] text-slate-500 shrink-0 select-none">
+            </div>
+
+            <!-- Main Hex Editor Canvas Area -->
+            <div id="hexContainer" class="flex-1 overflow-y-auto px-1 md:px-4 py-2 font-mono text-xs leading-relaxed focus:outline-none touch-pan-y" tabindex="0">
+                <!-- Empty State -->
+                <div id="emptyState" class="h-full flex flex-col items-center justify-center text-slate-600 gap-3 p-4 text-center">
+                    <div class="w-16 h-16 rounded-full bg-slate-900 flex items-center justify-center border border-slate-800">
+                        <i class="fa-solid fa-file-code text-3xl text-slate-500"></i>
+                    </div>
+                    <div>
+                        <p class="text-sm font-semibold text-slate-400">バイナリデータがありません</p>
+                        <p class="text-xs text-slate-500 mt-1">「ファイル開く」またはサンプルデータをお試しください</p>
+                    </div>
+                    <button id="emptyLoadDemoBtn" class="mt-2 px-4 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-semibold rounded-lg shadow-lg">
+                        <i class="fa-solid fa-play mr-1"></i> サンプルデータで試す
+                    </button>
+                </div>
+            </div>
+
+            <!-- Touch Keypad Overlay -->
+            <div id="touchKeypad" class="bg-slate-900 border-t border-slate-800 p-2 hidden shrink-0 z-10 shadow-2xl">
+                <div class="flex items-center justify-between pb-1.5 border-b border-slate-800 mb-1.5 px-1">
+                    <span class="text-[11px] font-mono text-slate-400">
+                        入力位置: <span id="keypadOffset" class="text-blue-400 font-bold">0x00000000</span>
+                    </span>
+                    <button id="togglePadBtn" class="text-[10px] bg-slate-800 text-slate-400 px-2 py-0.5 rounded border border-slate-700">
+                        閉じる
+                    </button>
+                </div>
+                <!-- Hex Keypad Grid -->
+                <div class="grid grid-cols-8 gap-1 font-mono text-xs font-bold text-slate-200">
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="0">0</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="1">1</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="2">2</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="3">3</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="4">4</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="5">5</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="6">6</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="7">7</button>
+                    
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="8">8</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 rounded text-center border border-slate-700" data-key="9">9</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="A">A</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="B">B</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="C">C</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="D">D</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="E">E</button>
+                    <button class="hex-key p-2.5 bg-slate-800 active:bg-blue-600 text-amber-300 rounded text-center border border-slate-700" data-key="F">F</button>
+                </div>
+                <!-- Controls Row -->
+                <div class="flex gap-1 mt-1 font-mono text-xs">
+                    <button id="padNavPrev" class="flex-1 py-2 bg-slate-800 active:bg-slate-700 rounded border border-slate-700 text-slate-300"><i class="fa-solid fa-arrow-left"></i></button>
+                    <button id="padNavNext" class="flex-1 py-2 bg-slate-800 active:bg-slate-700 rounded border border-slate-700 text-slate-300"><i class="fa-solid fa-arrow-right"></i></button>
+                    <button id="padBackspace" class="flex-1 py-2 bg-rose-950/80 active:bg-rose-900 text-rose-300 rounded border border-rose-800"><i class="fa-solid fa-delete-left"></i> BS</button>
+                </div>
+            </div>
+
+            <!-- Footer Status Bar -->
+            <div class="h-10 bg-slate-900 border-t border-slate-800 flex items-center justify-between px-3 text-xs font-mono shrink-0 select-none">
+                <div class="flex items-center gap-2 text-slate-400">
+                    <span class="text-[11px]">位置:</span>
+                    <span id="statusOffset" class="text-blue-400 font-bold">0x00000000</span>
+                    <span id="statusHex" class="hidden sm:inline text-amber-400 font-bold ml-1">(0x00)</span>
+                </div>
+
+                <!-- Page Navigation Controls -->
+                <div class="flex items-center gap-2">
+                    <button id="prevPageBtn" class="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded text-slate-300 disabled:opacity-30">
+                        <i class="fa-solid fa-chevron-left text-[10px]"></i>
+                    </button>
+                    <span class="text-slate-400 text-[11px]">
+                        <span id="currentPageNum" class="text-slate-200 font-bold">1</span> / <span id="totalPagesNum" class="text-slate-400">1</span>
+                    </span>
+                    <button id="nextPageBtn" class="p-1 px-2.5 bg-slate-800 hover:bg-slate-700 active:bg-slate-900 border border-slate-700 rounded text-slate-300 disabled:opacity-30">
+                        <i class="fa-solid fa-chevron-right text-[10px]"></i>
+                    </button>
+                </div>
+            </div>
+
+        </main>
+    </div>
+
+    <nav class="md:hidden h-12 bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 text-xs shrink-0 z-30">
+        <button id="tabHexBtn" class="flex flex-col items-center justify-center w-full h-full text-blue-400 font-semibold">
+            <i class="fa-solid fa-border-all text-sm mb-0.5"></i>
+            <span class="text-[10px]">Hex Editor</span>
+        </button>
+        <button id="tabAnnoBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-tags text-sm mb-0.5"></i>
+            <span class="text-[10px]">Tags</span>
+        </button>
+        <button id="tabSearchBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-magnifying-glass text-sm mb-0.5"></i>
+            <span class="text-[10px]">Search</span>
+        </button>
+        <button id="tabInspectorBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-sliders text-sm mb-0.5"></i>
+            <span class="text-[10px]">Inspector</span>
+        </button>
+        <button id="tabKeypadBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
+            <i class="fa-solid fa-keyboard text-sm mb-0.5"></i>
+            <span class="text-[10px]">Key pad</span>
+        </button>
+    </nav>
+
+    <script>
+        // Core Constants & Application States
+        const PAGE_SIZE = 2048; // 2KB per page
+        let fileBuffer = new Uint8Array(0);
+        let modifiedOffsets = new Set();
+        let fileName = '未選択';
+        let cursorOffset = 0;
+        // HEXキーパッド入力中のニブル位置: 0=上位4bit, 1=下位4bit
+        let hexInputNibble = 0;
+        let isLittleEndian = true;
+        let currentPage = 0;
+        let searchResults = [];
+        let searchIndex = -1;
+        let searchMode = 'hex';
+        let bytesPerRow = 8;
+        let isAutoBytes = false;
+        let fontScale = 100;
+        
+        // Annotations Array Store
+        // Schema: { id, start, end, label, desc, color, enabled }
+        let annotations = [];
+        let selectedColor = 'blue';
+
+        // DOM Element Cache
+        const fileInput = document.getElementById('fileInput');
+        const downloadBtn = document.getElementById('downloadBtn');
+        const demoBtn = document.getElementById('demoBtn');
+        const emptyLoadDemoBtn = document.getElementById('emptyLoadDemoBtn');
+        const hexContainer = document.getElementById('hexContainer');
+        const hexHeaderBar = document.getElementById('hexHeaderBar');
+        const hexDisplayAsciiBtn = document.getElementById('hexDisplayAsciiBtn');
+        const hexDisplayCharmapBtn = document.getElementById('hexDisplayCharmapBtn');
+        let hexRightDisplayMode = 'ascii';
+        const emptyState = document.getElementById('emptyState');
+        const dropOverlay = document.getElementById('dropOverlay');
+
+        // Panels & Tabs
+        const sidebarPanel = document.getElementById('sidebarPanel');
+        const closeMobileTabBtn = document.getElementById('closeMobileTabBtn');
+        const mobileTabTitle = document.getElementById('mobileTabTitle');
+        const panelAnnotations = document.getElementById('panelAnnotations');
+        const panelSearch = document.getElementById('panelSearch');
+        const panelInspector = document.getElementById('panelInspector');
+
+        const tabHexBtn = document.getElementById('tabHexBtn');
+        const tabAnnoBtn = document.getElementById('tabAnnoBtn');
+        const tabSearchBtn = document.getElementById('tabSearchBtn');
+        const tabInspectorBtn = document.getElementById('tabInspectorBtn');
+        const tabKeypadBtn = document.getElementById('tabKeypadBtn');
+
+        // Touch Keypad Elements
+        const touchKeypad = document.getElementById('touchKeypad');
+        const togglePadBtn = document.getElementById('togglePadBtn');
+        const keypadOffset = document.getElementById('keypadOffset');
+        const padNavPrev = document.getElementById('padNavPrev');
+        const padNavNext = document.getElementById('padNavNext');
+        const padBackspace = document.getElementById('padBackspace');
+
+        // Annotation Form Controls
+        const allAnnoOnBtn = document.getElementById('allAnnoOnBtn');
+        const allAnnoOffBtn = document.getElementById('allAnnoOffBtn');
+        const annoStartInput = document.getElementById('annoStartInput');
+        const annoEndInput = document.getElementById('annoEndInput');
+        const annoLabelInput = document.getElementById('annoLabelInput');
+        const annoDescInput = document.getElementById('annoDescInput');
+        const addAnnoBtn = document.getElementById('addAnnoBtn');
+        const annoList = document.getElementById('annoList');
+        const noAnnoText = document.getElementById('noAnnoText');
+        const quickTagCurrentBtn = document.getElementById('quickTagCurrentBtn');
+        const quickTagOffset = document.getElementById('quickTagOffset');
+        const annoStorageStatus = document.getElementById('annoStorageStatus');
+        const clearAnnoStorageBtn = document.getElementById('clearAnnoStorageBtn');
+
+        // Active Tag Info Box (Container for multiple overlaps)
+        const activeTagContainer = document.getElementById('activeTagContainer');
+
+        // Info & Inspector Elements
+        const infoFileName = document.getElementById('infoFileName');
+        const infoFileSize = document.getElementById('infoFileSize');
+        const infoFileStatus = document.getElementById('infoFileStatus');
+        const bytesPerRowSelect = document.getElementById('bytesPerRowSelect');
+
+        const endianToggle = document.getElementById('endianToggle');
+        const inspBinary = document.getElementById('inspBinary');
+        const inspAscii = document.getElementById('inspAscii');
+        const inspInt8 = document.getElementById('inspInt8');
+        const inspUint8 = document.getElementById('inspUint8');
+        const inspInt16 = document.getElementById('inspInt16');
+        const inspUint16 = document.getElementById('inspUint16');
+        const inspInt32 = document.getElementById('inspInt32');
+        const inspUint32 = document.getElementById('inspUint32');
+        const inspFloat32 = document.getElementById('inspFloat32');
+        const inspFloat64 = document.getElementById('inspFloat64');
+        const inspPointerBytes = document.getElementById('inspPointerBytes');
+        const inspPointerLE = document.getElementById('inspPointerLE');
+        const inspPointerBE = document.getElementById('inspPointerBE');
+        const jumpPointerLEBtn = document.getElementById('jumpPointerLEBtn');
+        const jumpPointerBEBtn = document.getElementById('jumpPointerBEBtn');
+        const pointerHint = document.getElementById('pointerHint');
+        let charmap = new Map();
+        let hexSpecialColorEnabled = localStorage.getItem('HexStudio.hexSpecialColor') !== '0';
+        let hexAnnotationEnabled = localStorage.getItem('HexStudio.hexAnnotation') !== '0';
+        const hexSpecialColorBtn = document.getElementById('hexSpecialColorBtn');
+        const hexAnnotationToggleBtn = document.getElementById('hexAnnotationToggleBtn');
+
+        // Pagination & Zoom Controls
+        const statusOffset = document.getElementById('statusOffset');
+        const statusHex = document.getElementById('statusHex');
+        const currentPageNum = document.getElementById('currentPageNum');
+        const totalPagesNum = document.getElementById('totalPagesNum');
+        const prevPageBtn = document.getElementById('prevPageBtn');
+        const nextPageBtn = document.getElementById('nextPageBtn');
+        const zoomInBtn = document.getElementById('zoomInBtn');
+        const zoomOutBtn = document.getElementById('zoomOutBtn');
+        const zoomLabel = document.getElementById('zoomLabel');
+
+        // Search & Jump Controls
+        const jumpInput = document.getElementById('jumpInput');
+        const jumpBtn = document.getElementById('jumpBtn');
+        const searchInput = document.getElementById('searchInput');
+        const searchExecuteBtn = document.getElementById('searchExecuteBtn');
+        const searchTypeHex = document.getElementById('searchTypeHex');
+        const searchTypeText = document.getElementById('searchTypeText');
+        const searchTypeMap = document.getElementById('searchTypeMap');
+        const searchPrevBtn = document.getElementById('searchPrevBtn');
+        const searchNextBtn = document.getElementById('searchNextBtn');
+        const searchStats = document.getElementById('searchStats');
+const searchResultList = document.getElementById('searchResultList');
+
+        window.onload = () => {
+            adjustResponsiveBytes();
+            setupEventListeners();
+            window.addEventListener('resize', handleResize);
+            updateAnnotationStorageStatus();
+        };
+
+        function handleResize() {
+            if (isAutoBytes) {
+                adjustResponsiveBytes();
+                renderHeaderBar();
+                renderPage();
+            }
+        }
+
+        function adjustResponsiveBytes() {
+            if (!isAutoBytes) return;
+            const width = window.innerWidth;
+            if (width < 420) {
+                bytesPerRow = 4;
+            } else if (width < 768) {
+                bytesPerRow = 8;
+            } else {
+                bytesPerRow = 16;
+            }
+        }
+
+        function setupEventListeners() {
+            // File Loaders
+            fileInput.addEventListener('change', (e) => {
+                if (e.target.files.length > 0) loadFile(e.target.files[0]);
+            });
+            demoBtn.addEventListener('click', loadSampleData);
+            emptyLoadDemoBtn.addEventListener('click', loadSampleData);
+            downloadBtn.addEventListener('click', downloadFile);
+
+            // Row Width Selection
+            bytesPerRowSelect.addEventListener('change', (e) => {
+                const val = e.target.value;
+                if (val === 'auto') {
+                    isAutoBytes = true;
+                    adjustResponsiveBytes();
+                } else {
+                    isAutoBytes = false;
+                    bytesPerRow = parseInt(val, 10);
+                }
+                renderHeaderBar();
+                renderPage();
+            });
+
+            // Zoom Handlers
+            zoomInBtn.addEventListener('click', () => {
+                if (fontScale < 160) {
+                    fontScale += 10;
+                    applyZoom();
+                }
+            });
+            zoomOutBtn.addEventListener('click', () => {
+                if (fontScale > 70) {
+                    fontScale -= 10;
+                    applyZoom();
+                }
+            });
+
+            // Desktop Drag-and-Drop
+            window.addEventListener('dragover', (e) => { e.preventDefault(); dropOverlay.classList.remove('hidden'); });
+            window.addEventListener('dragleave', (e) => {
+                if (e.clientX <= 0 || e.clientY <= 0) dropOverlay.classList.add('hidden');
+            });
+            window.addEventListener('drop', (e) => {
+                e.preventDefault();
+                dropOverlay.classList.add('hidden');
+                if (e.dataTransfer.files.length > 0) loadFile(e.dataTransfer.files[0]);
+            });
+
+            // Mobile Tab Controls
+            tabHexBtn.addEventListener('click', () => showMobileTab('hex'));
+            tabAnnoBtn.addEventListener('click', () => showMobileTab('anno'));
+            tabSearchBtn.addEventListener('click', () => showMobileTab('search'));
+            tabInspectorBtn.addEventListener('click', () => showMobileTab('inspector'));
+            tabKeypadBtn.addEventListener('click', () => {
+                touchKeypad.classList.toggle('hidden');
+                updateTabBtnStyles('keypad');
+            });
+            closeMobileTabBtn.addEventListener('click', () => showMobileTab('hex'));
+            togglePadBtn.addEventListener('click', () => touchKeypad.classList.add('hidden'));
+
+            // Keypad Event Delegation
+            document.querySelectorAll('.hex-key').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const key = btn.dataset.key;
+                    applyHexInputChar(key);
+                });
+            });
+
+            padNavPrev.addEventListener('click', () => { if (cursorOffset > 0) setCursorOffset(cursorOffset - 1); });
+            padNavNext.addEventListener('click', () => { if (cursorOffset < fileBuffer.length - 1) setCursorOffset(cursorOffset + 1); });
+            padBackspace.addEventListener('click', () => {
+                hexInputNibble = 0;
+                fileBuffer[cursorOffset] = 0x00;
+                modifiedOffsets.add(cursorOffset);
+                renderPage();
+                updateInspector();
+            });
+
+            // Color Picker Selection
+            document.querySelectorAll('.color-opt').forEach(btn => {
+                btn.addEventListener('click', (e) => {
+                    document.querySelectorAll('.color-opt').forEach(b => b.classList.remove('ring-2', 'ring-white'));
+                    btn.classList.add('ring-2', 'ring-white');
+                    selectedColor = btn.dataset.color;
+                });
+            });
+
+            // Annotation Handlers
+            allAnnoOnBtn.addEventListener('click', () => setAllAnnotationsState(true));
+            allAnnoOffBtn.addEventListener('click', () => setAllAnnotationsState(false));
+
+            addAnnoBtn.addEventListener('click', addAnnotationFromForm);
+            quickTagCurrentBtn.addEventListener('click', () => {
+                const hexStr = cursorOffset.toString(16).toUpperCase();
+                annoStartInput.value = hexStr;
+                annoEndInput.value = hexStr;
+            });
+            clearAnnoStorageBtn.addEventListener('click', clearAnnotationStorage);
+
+
+            // Endian Switcher
+            endianToggle.addEventListener('click', () => {
+                isLittleEndian = !isLittleEndian;
+                endianToggle.textContent = isLittleEndian ? 'Little Endian' : 'Big Endian';
+                updateInspector();
+            });
+
+            charmap = new Map(Object.entries(DEFAULT_FIRE_RED_CHARMAP));
+
+            hexDisplayAsciiBtn.addEventListener('click', () => setHexRightDisplayMode('ascii'));
+            hexDisplayCharmapBtn.addEventListener('click', () => setHexRightDisplayMode('charmap'));
+            hexSpecialColorBtn.addEventListener('click', () => {
+                hexSpecialColorEnabled = !hexSpecialColorEnabled;
+                localStorage.setItem('HexStudio.hexSpecialColor', hexSpecialColorEnabled ? '1' : '0');
+                updateHexSpecialColorButton();
+                renderPage();
+            });
+
+            hexAnnotationToggleBtn.addEventListener('click', () => {
+                hexAnnotationEnabled = !hexAnnotationEnabled;
+                localStorage.setItem('HexStudio.hexAnnotation', hexAnnotationEnabled ? '1' : '0');
+                updateHexAnnotationToggleButton();
+                renderPage();
+                updateInspector();
+            });
+
+            updateHexSpecialColorButton();
+            updateHexAnnotationToggleButton();
+            updateHexDisplayModeButtons();
+
+            // Pagination Handlers
+            prevPageBtn.addEventListener('click', () => { if (currentPage > 0) { currentPage--; renderPage(); } });
+            nextPageBtn.addEventListener('click', () => {
+                const maxPage = Math.ceil(fileBuffer.length / PAGE_SIZE) - 1;
+                if (currentPage < maxPage) { currentPage++; renderPage(); }
+            });
+
+            // Search and Jump
+            jumpBtn.addEventListener('click', performJump);
+            jumpInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') performJump(); });
+
+            function updateSearchTypeButtons() {
+                const active = 'flex-1 py-1 text-xs font-medium bg-blue-600 text-white border border-blue-600';
+                const inactive = 'flex-1 py-1 text-xs font-medium bg-slate-800 text-slate-400 border border-slate-700';
+
+                searchTypeHex.className = inactive;
+                searchTypeText.className = inactive;
+                searchTypeMap.className = inactive;
+
+                if (searchMode === 'hex') {
+                    searchTypeHex.className = active;
+                    searchInput.placeholder = '例: 89 50 4E 47';
+                } else if (searchMode === 'text') {
+                    searchTypeText.className = active;
+                    searchInput.placeholder = '例: PNG または Header';
+                } else {
+                    searchTypeMap.className = active;
+                    searchInput.placeholder = '例: こんにちは';
+                }
+            }
+
+            searchTypeHex.addEventListener('click', () => {
+                searchMode = 'hex';
+                updateSearchTypeButtons();
+            });
+
+            searchTypeText.addEventListener('click', () => {
+                searchMode = 'text';
+                updateSearchTypeButtons();
+            });
+
+            searchTypeMap.addEventListener('click', () => {
+                searchMode = 'map';
+                updateSearchTypeButtons();
+            });
+
+            updateSearchTypeButtons();
+
+            searchInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') performSearch(); });
+            searchExecuteBtn.addEventListener('click', performSearch);
+            searchNextBtn.addEventListener('click', () => navigateSearch(1));
+            searchPrevBtn.addEventListener('click', () => navigateSearch(-1));
+
+            // Pointer Analysis
+            jumpPointerLEBtn.addEventListener('click', () => jumpFromPointer('le'));
+            jumpPointerBEBtn.addEventListener('click', () => jumpFromPointer('be'));
+
+            // Hardware Keyboard Navigation
+            hexContainer.addEventListener('keydown', handleKeyNavigation);
+        }
+
+        function applyZoom() {
+            zoomLabel.textContent = fontScale + '%';
+            hexContainer.style.fontSize = (0.75 * (fontScale / 100)) + 'rem';
+        }
+
+        function showMobileTab(tab) {
+            updateTabBtnStyles(tab);
+            if (tab === 'hex') {
+                sidebarPanel.classList.add('hidden');
+                sidebarPanel.classList.remove('flex');
+            } else {
+                sidebarPanel.classList.remove('hidden');
+                sidebarPanel.classList.add('flex');
+
+                // Hide all sub-panels then show target
+                panelAnnotations.classList.add('hidden');
+                panelSearch.classList.add('hidden');
+                panelInspector.classList.add('hidden');
+
+                if (tab === 'anno') {
+                    mobileTabTitle.innerHTML = '<i class="fa-solid fa-tags text-purple-400"></i> 範囲タグ一覧';
+                    panelAnnotations.classList.remove('hidden');
+                } else if (tab === 'search') {
+                    mobileTabTitle.innerHTML = '<i class="fa-solid fa-magnifying-glass text-amber-400"></i> 検索 & ジャンプ';
+                    panelSearch.classList.remove('hidden');
+                } else if (tab === 'inspector') {
+                    mobileTabTitle.innerHTML = '<i class="fa-solid fa-sliders text-emerald-400"></i> Inspector';
+                    panelInspector.classList.remove('hidden');
+                }
+            }
+        }
+
+        function updateTabBtnStyles(activeTab) {
+            const tabs = [
+                { id: 'tabHexBtn', name: 'hex' },
+                { id: 'tabAnnoBtn', name: 'anno' },
+                { id: 'tabSearchBtn', name: 'search' },
+                { id: 'tabInspectorBtn', name: 'inspector' },
+                { id: 'tabKeypadBtn', name: 'keypad' }
+            ];
+            tabs.forEach(t => {
+                const elem = document.getElementById(t.id);
+                if (t.name === activeTab) {
+                    elem.className = 'flex flex-col items-center justify-center w-full h-full text-blue-400 font-bold';
+                } else {
+                    elem.className = 'flex flex-col items-center justify-center w-full h-full text-slate-400';
+                }
+            });
+        }
+
+        function loadFile(file) {
+            const reader = new FileReader();
+            reader.onload = (e) => {
+                fileBuffer = new Uint8Array(e.target.result);
+                fileName = file.name;
+                modifiedOffsets.clear();
+                annotations = [];
+                loadAnnotationsFromLocalStorage();
+                currentPage = 0;
+                cursorOffset = 0;
+                searchResults = [];
+                searchIndex = -1;
+updateSearchUI();
+
+                infoFileName.textContent = fileName;
+                infoFileName.title = fileName;
+                infoFileSize.textContent = formatBytes(fileBuffer.length);
+                infoFileStatus.textContent = '読み込み完了';
+                infoFileStatus.className = 'text-emerald-400';
+
+                downloadBtn.disabled = false;
+                renderHeaderBar();
+                renderPage();
+                updateInspector();
+            };
+            reader.readAsArrayBuffer(file);
+        }
+
+        function loadSampleData() {
+            const sampleText = "HexStudio Editor Tagging Feature Sample!\x00\x01\x02\x03\x04\x05\xFF\xFE\xFD";
+            const encoder = new TextEncoder();
+            const textBytes = encoder.encode(sampleText);
+            
+            const buffer = new Uint8Array(512);
+            // PNG Magic bytes
+            buffer.set([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A], 0);
+            buffer.set(textBytes, 16);
+            for (let i = 96; i < buffer.length; i++) {
+                buffer[i] = Math.floor(Math.random() * 256);
+            }
+
+            fileBuffer = buffer;
+            fileName = 'sample_binary.bin';
+            modifiedOffsets.clear();
+            currentPage = 0;
+            cursorOffset = 0;
+            searchResults = [];
+            searchIndex = -1;
+updateSearchUI();
+
+            // サンプル用デフォルトタグ
+            annotations = [
+                { id: 1, start: 0, end: 7, label: 'PNG Header', desc: 'PNGファイルのマジックバイト識別子', color: 'purple', enabled: true },
+                { id: 2, start: 4, end: 11, label: 'Chunk Test', desc: 'IHDRチャンク先頭のテスト（タグの重なり確認用）', color: 'rose', enabled: true },
+                { id: 3, start: 16, end: 54, label: 'Text Payload', desc: '文字列データセクション', color: 'emerald', enabled: true },
+                { id: 4, start: 96, end: 127, label: 'Random Bytes', desc: '暗号化/乱数テスト領域', color: 'amber', enabled: true }
+            ];
+
+            // 既に保存されていれば保存データを優先
+            loadAnnotationsFromLocalStorage();
+
+            infoFileName.textContent = fileName;
+            infoFileName.title = fileName;
+            infoFileSize.textContent = formatBytes(fileBuffer.length);
+            infoFileStatus.textContent = 'サンプルデータ';
+            infoFileStatus.className = 'text-blue-400';
+
+            downloadBtn.disabled = false;
+            renderHeaderBar();
+            renderPage();
+            renderAnnotationList();
+            updateInspector();
+        }
+
+        function renderHeaderBar() {
+            hexHeaderBar.innerHTML = '';
+            const offsetHeader = document.createElement('div');
+            offsetHeader.className = 'w-16 sm:w-20 shrink-0 font-bold text-slate-400';
+            offsetHeader.textContent = 'Offset';
+            hexHeaderBar.appendChild(offsetHeader);
+
+            const hexCols = document.createElement('div');
+            hexCols.className = 'flex-1 flex gap-1.5 sm:gap-2 justify-start px-1 sm:px-2 font-bold text-slate-400';
+
+            for (let i = 0; i < bytesPerRow; i++) {
+                if (i > 0 && i % 8 === 0) {
+                    const sep = document.createElement('span');
+                    sep.className = 'w-1 text-center text-slate-700';
+                    sep.textContent = '|';
+                    hexCols.appendChild(sep);
+                }
+                const col = document.createElement('span');
+                col.className = 'w-5 sm:w-6 text-center';
+                col.textContent = i.toString(16).padStart(2, '0').toUpperCase();
+                hexCols.appendChild(col);
+            }
+            hexHeaderBar.appendChild(hexCols);
+
+            const asciiHeader = document.createElement('div');
+            asciiHeader.className = 'w-20 sm:w-36 shrink-0 px-1 font-bold text-slate-400 text-right sm:text-left';
+            asciiHeader.textContent = hexRightDisplayMode === 'charmap' ? 'Charmap' : 'ASCII';
+            hexHeaderBar.appendChild(asciiHeader);
+        }
+
+        function decodeCharmapTokens(bytes, baseOffset) {
+            if (!charmap.size) return [];
+            const entries = [...charmap.entries()].sort((a, b) => {
+                const al = a[0].split(' ').length;
+                const bl = b[0].split(' ').length;
+                return bl - al;
+            });
+            const tokens = [];
+            for (let i = 0; i < bytes.length;) {
+                let matched = false;
+                for (const [key, value] of entries) {
+                    const parts = key.split(' ').map(x => parseInt(x, 16));
+                    if (i + parts.length > bytes.length) continue;
+                    let ok = true;
+                    for (let j = 0; j < parts.length; j++) {
+                        if (bytes[i + j] !== parts[j]) { ok = false; break; }
+                    }
+                    if (ok) {
+                        tokens.push({ text: value, start: baseOffset + i, length: parts.length });
+                        i += parts.length;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    tokens.push({ text: `[${bytes[i].toString(16).padStart(2, '0').toUpperCase()}]`, start: baseOffset + i, length: 1 });
+                    i++;
+                }
+            }
+            return tokens;
+        }
+
+        function updateHexDisplayModeButtons() {
+            const isMap = hexRightDisplayMode === 'charmap';
+            hexDisplayAsciiBtn.className = isMap
+                ? 'text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500'
+                : 'text-[9px] font-semibold px-2 py-1 rounded bg-blue-950 border border-blue-700 text-blue-300';
+            hexDisplayCharmapBtn.className = isMap
+                ? 'text-[9px] font-semibold px-2 py-1 rounded bg-emerald-950 border border-emerald-700 text-emerald-300'
+                : 'text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500';
+        }
+
+        function setHexRightDisplayMode(mode) {
+            hexRightDisplayMode = mode === 'charmap' ? 'charmap' : 'ascii';
+            updateHexDisplayModeButtons();
+            renderHeaderBar();
+            renderPage();
+        }
+
+        function applySpecialByteInlineStyle(elem, specialClass) {
+            const styles = {
+                'special-space': { color: '#94a3b8', background: 'rgba(100, 116, 139, 0.16)' },
+                'special-newline': { color: '#67e8f9', background: 'rgba(6, 182, 212, 0.16)' },
+                'special-paragraph': { color: '#a78bfa', background: 'rgba(139, 92, 246, 0.16)' },
+                'special-scroll': { color: '#c084fc', background: 'rgba(168, 85, 247, 0.16)' },
+                'special-end': { color: '#fb7185', background: 'rgba(244, 63, 94, 0.16)' },
+                'special-control': { color: '#fbbf24', background: 'rgba(245, 158, 11, 0.14)' },
+                'special-macro': { color: '#4ade80', background: 'rgba(34, 197, 94, 0.14)' }
+            };
+            const style = styles[specialClass];
+            if (!style) return;
+            elem.style.setProperty('color', style.color, 'important');
+            elem.style.setProperty('background-color', style.background, 'important');
+            elem.style.setProperty('border-bottom', 'none', 'important');
+        }
+
+        function getSpecialByteClass(val) {
+            if (!hexSpecialColorEnabled) return '';
+            switch (val) {
+                case 0x00: return 'special-space';      // charmap: full-width space
+                case 0xFE: return 'special-newline';    // charmap: \n                case 0xFB: return 'special-paragraph';  // charmap: \p
+                case 0xFA: return 'special-scroll';    // charmap: \l
+                case 0xFF: return 'special-end';       // charmap: $ / terminator
+                case 0xFC: return 'special-control';   // text functions
+                case 0xFD: return 'special-control';   // dynamic/string macros
+                case 0xF8: return 'special-macro';     // buttons
+                case 0xF9: return 'special-macro';     // special macros/emojis
+                default: return '';
+            }
+        }
+
+        function getSpecialByteLabel(val) {
+            switch (val) {
+                case 0x00: return '00 = スペース';
+                case 0xFE: return 'FE = 改行';
+                case 0xFB: return 'FB = 段落 / \p';
+                case 0xFA: return 'FA = スクロール / \l';
+                case 0xFF: return 'FF = 終端 / $';
+                case 0xFC: return 'FC = テキスト制御';
+                case 0xFD: return 'FD = 文字列マクロ';
+                case 0xF8: return 'F8 = ボタンマクロ';
+                case 0xF9: return 'F9 = 特殊マクロ';
+                default: return '';
+            }
+        }
+
+        function updateHexSpecialColorButton() {
+            if (!hexSpecialColorBtn) return;
+            hexSpecialColorBtn.textContent = hexSpecialColorEnabled ? '制御色 ON' : '制御色 OFF';
+            hexSpecialColorBtn.className = hexSpecialColorEnabled
+                ? 'text-[9px] font-semibold px-2 py-1 rounded bg-amber-950 border border-amber-700 text-amber-300'
+                : 'text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500';
+        }
+
+        function updateHexAnnotationToggleButton() {
+            if (!hexAnnotationToggleBtn) return;
+            hexAnnotationToggleBtn.textContent = hexAnnotationEnabled ? '範囲タグ ON' : '範囲タグ OFF';
+            hexAnnotationToggleBtn.className = hexAnnotationEnabled
+                ? 'text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300'
+                : 'text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500';
+        }
+
+        function renderPage() {
+            if (fileBuffer.length === 0) {
+                hexContainer.innerHTML = '';
+                hexContainer.appendChild(emptyState);
+                return;
+            }
+
+            hexContainer.innerHTML = '';
+            const pageStart = currentPage * PAGE_SIZE;
+            const pageEnd = Math.min(pageStart + PAGE_SIZE, fileBuffer.length);
+            const fragment = document.createDocumentFragment();
+
+            for (let rowOffset = pageStart; rowOffset < pageEnd; rowOffset += bytesPerRow) {
+                const rowElem = document.createElement('div');
+                rowElem.className = 'flex items-center hover:bg-slate-900/60 rounded px-0.5 py-0.5 group';
+
+                // Offset Column
+                const offsetElem = document.createElement('div');
+                offsetElem.className = 'w-16 sm:w-20 shrink-0 text-slate-500 font-mono text-[11px] select-none';
+                offsetElem.textContent = rowOffset.toString(16).padStart(6, '0').toUpperCase();
+                rowElem.appendChild(offsetElem);
+
+                // Hex Bytes Column
+                const hexGroup = document.createElement('div');
+                hexGroup.className = 'flex-1 flex gap-1 sm:gap-2 justify-start px-1 sm:px-2 font-mono';
+
+                // ASCII / Charmap Column
+                const asciiGroup = document.createElement('div');
+                asciiGroup.className = hexRightDisplayMode === 'charmap'
+                    ? 'w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400 overflow-hidden'
+                    : 'w-20 sm:w-36 shrink-0 px-1 font-mono flex items-center justify-end sm:justify-start tracking-normal sm:tracking-widest text-slate-400 overflow-hidden';
+
+                const rowCharmapTokens = hexRightDisplayMode === 'charmap'
+                    ? decodeCharmapTokens(fileBuffer.slice(rowOffset, Math.min(rowOffset + bytesPerRow, fileBuffer.length)), rowOffset)
+                    : [];
+
+                if (hexRightDisplayMode === 'charmap') {
+                    if (rowCharmapTokens.length === 0) {
+                        const emptyMap = document.createElement('span');
+                        emptyMap.className = 'text-slate-600';
+                        emptyMap.textContent = '-';
+                        asciiGroup.appendChild(emptyMap);
+                    } else {
+                        rowCharmapTokens.forEach(token => {
+                            const tokenEl = document.createElement('span');
+                            const tokenActive = cursorOffset >= token.start && cursorOffset < token.start + token.length;
+                            tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre ' + (tokenActive ? 'bg-blue-900 text-blue-200' : 'text-emerald-300');
+                            tokenEl.textContent = token.text;
+                            tokenEl.title = '0x' + token.start.toString(16).padStart(6, '0').toUpperCase();
+                            tokenEl.addEventListener('click', () => setCursorOffset(token.start));
+                            asciiGroup.appendChild(tokenEl);
+                        });
+                    }
+                }
+
+                for (let i = 0; i < bytesPerRow; i++) {
+
+                    const byteOffset = rowOffset + i;
+                    if (i > 0 && i % 8 === 0) {
+                        const separator = document.createElement('span');
+                        separator.className = 'w-1 text-center text-slate-700 select-none';
+                        separator.textContent = '|';
+                        hexGroup.appendChild(separator);
+                    }
+
+                    if (byteOffset < fileBuffer.length) {
+                        const val = fileBuffer[byteOffset];
+                        const isModified = modifiedOffsets.has(byteOffset);
+                        const isActive = byteOffset === cursorOffset;
+                        const isSearchMatch = searchResults.includes(byteOffset);
+                        const isSearchCurrent = searchResults[searchIndex] === byteOffset;
+
+                        // Check for active (enabled) annotations only
+                        let matchedAnnos = hexAnnotationEnabled
+                            ? annotations.filter(a => a.enabled && byteOffset >= a.start && byteOffset <= a.end)
+                            : [];
+                        // Sort by range size (narrowest first) so the most specific tag is colorized
+                        matchedAnnos.sort((a, b) => (a.end - a.start) - (b.end - b.start));
+
+                        // Hex Cell Setup
+                        // 優先順位: カーソル/検索 > 制御色 > 範囲タグ > 編集色 > 通常色
+                        const hexCell = document.createElement('span');
+                        const specialClass = getSpecialByteClass(val);
+                        let hexClasses = 'hex-cell w-5 sm:w-6 text-center cursor-pointer rounded select-none ';
+                        if (isActive) {
+                            hexClasses += 'active ';
+                        } else if (isSearchCurrent) {
+                            hexClasses += 'search-current ';
+                        } else if (isSearchMatch) {
+                            hexClasses += 'search-match ';
+                        } else if (specialClass) {
+                            hexClasses += specialClass;
+                            if (matchedAnnos.length > 0) hexClasses += 'anno-multi ';
+                        } else if (matchedAnnos.length > 0) {
+                            hexClasses += `anno-${matchedAnnos[0].color} `;
+                            if (matchedAnnos.length > 1) hexClasses += 'anno-multi ';
+                        } else if (isModified) {
+                            hexClasses += 'modified ';
+                        } else {
+                            hexClasses += 'text-slate-200 ';
+                        }
+
+                        hexCell.className = hexClasses;
+                        // 制御色は範囲タグのCSSに絶対に負けないよう、最終的にinline !importantで適用
+                        if (!isActive && !isSearchCurrent && !isSearchMatch && specialClass) {
+                            applySpecialByteInlineStyle(hexCell, specialClass);
+                        }
+                        hexCell.textContent = val.toString(16).padStart(2, '0').toUpperCase();
+                        const specialLabel = getSpecialByteLabel(val);
+                        if (specialLabel) hexCell.title = specialLabel;
+                        hexCell.addEventListener('click', () => setCursorOffset(byteOffset));
+                        hexGroup.appendChild(hexCell);
+
+                        // ASCII Cell Setup (only when ASCII mode is selected)
+                        if (hexRightDisplayMode === 'ascii') {
+                        const asciiCell = document.createElement('span');
+                        let asciiClasses = 'ascii-cell w-2 sm:w-2.5 text-center cursor-pointer rounded ';
+                        if (isActive) {
+                            asciiClasses += 'active ';
+                        } else if (isSearchCurrent) {
+                            asciiClasses += 'search-current ';
+                        } else if (isSearchMatch) {
+                            asciiClasses += 'search-match ';
+                        } else if (specialClass) {
+                            asciiClasses += specialClass;
+                            if (matchedAnnos.length > 0) asciiClasses += 'anno-multi ';
+                        } else if (matchedAnnos.length > 0) {
+                            asciiClasses += `anno-${matchedAnnos[0].color} `;
+                            if (matchedAnnos.length > 1) asciiClasses += 'anno-multi ';
+                        } else if (isModified) {
+                            asciiClasses += 'modified ';
+                        } else {
+                            asciiClasses += (val >= 32 && val <= 126) ? 'text-slate-300 ' : 'text-slate-600 ';
+                        }
+
+                        asciiCell.className = asciiClasses;
+                        // 制御色は範囲タグのCSSに絶対に負けないよう、最終的にinline !importantで適用
+                        if (!isActive && !isSearchCurrent && !isSearchMatch && specialClass) {
+                            applySpecialByteInlineStyle(asciiCell, specialClass);
+                        }
+                        asciiCell.textContent = (val >= 32 && val <= 126) ? String.fromCharCode(val) : '.';
+                        const asciiSpecialLabel = getSpecialByteLabel(val);
+                        if (asciiSpecialLabel) asciiCell.title = asciiSpecialLabel;
+                        asciiCell.addEventListener('click', () => setCursorOffset(byteOffset));
+                        asciiGroup.appendChild(asciiCell);
+                        }
+                    } else {
+                        const emptyHex = document.createElement('span');
+                        emptyHex.className = 'w-5 sm:w-6 text-center text-transparent select-none';
+                        emptyHex.textContent = '..';
+                        hexGroup.appendChild(emptyHex);
+                    }
+                }
+
+                rowElem.appendChild(hexGroup);
+                rowElem.appendChild(asciiGroup);
+                fragment.appendChild(rowElem);
+            }
+
+            hexContainer.appendChild(fragment);
+            updatePaginationUI();
+        }
+
+        function addAnnotationFromForm() {
+            const startVal = parseInt(annoStartInput.value.trim(), 16);
+            const endVal = parseInt(annoEndInput.value.trim(), 16);
+            const label = annoLabelInput.value.trim() || '無題タグ';
+            const desc = annoDescInput.value.trim() || '';
+
+            if (isNaN(startVal) || isNaN(endVal) || startVal < 0 || endVal < startVal) {
+                alert('有効な開始・終了アドレス(16進数)を入力してください。');
+                return;
+            }
+
+            const newAnno = {
+                id: Date.now(),
+                start: startVal,
+                end: endVal,
+                label: label,
+                desc: desc,
+                color: selectedColor,
+                enabled: true
+            };
+
+            annotations.push(newAnno);
+            annotations.sort((a, b) => a.start - b.start);
+            saveAnnotationsToLocalStorage();
+
+            // Reset Form Inputs
+            annoStartInput.value = '';
+            annoEndInput.value = '';
+            annoLabelInput.value = '';
+            annoDescInput.value = '';
+
+            renderAnnotationList();
+            renderPage();
+            updateInspector();
+        }
+
+        function toggleAnnotation(id) {
+            const anno = annotations.find(a => a.id === id);
+            if (anno) {
+                anno.enabled = !anno.enabled;
+                saveAnnotationsToLocalStorage();
+                renderAnnotationList();
+                renderPage();
+                updateInspector();
+            }
+        }
+
+        function setAllAnnotationsState(state) {
+            annotations.forEach(a => a.enabled = state);
+            saveAnnotationsToLocalStorage();
+            renderAnnotationList();
+            renderPage();
+            updateInspector();
+        }
+
+        function removeAnnotation(id) {
+            annotations = annotations.filter(a => a.id !== id);
+            saveAnnotationsToLocalStorage();
+            renderAnnotationList();
+            renderPage();
+            updateInspector();
+        }
+
+        function renderAnnotationList() {
+            annoList.innerHTML = '';
+            if (annotations.length === 0) {
+                annoList.appendChild(noAnnoText);
+                return;
+            }
+
+            annotations.forEach(anno => {
+                const item = document.createElement('div');
+                item.className = `bg-slate-950/80 p-2 rounded border transition flex items-center justify-between text-xs font-mono group ${anno.enabled ? 'border-slate-800 hover:border-slate-700 opacity-100' : 'border-slate-900 opacity-50'}`;
+
+                const colorBgMap = {
+                    blue: 'bg-blue-500',
+                    emerald: 'bg-emerald-500',
+                    amber: 'bg-amber-500',
+                    rose: 'bg-rose-500',
+                    purple: 'bg-purple-500',
+                    cyan: 'bg-cyan-500',
+                    indigo: 'bg-indigo-500',
+                    sky: 'bg-sky-500',
+                    teal: 'bg-teal-500',
+                    lime: 'bg-lime-500',
+                    yellow: 'bg-yellow-500',
+                    orange: 'bg-orange-500',
+                    red: 'bg-red-500',
+                    pink: 'bg-pink-500',
+                    fuchsia: 'bg-fuchsia-500',
+                    violet: 'bg-violet-500',
+                    slate: 'bg-slate-500',
+                    gray: 'bg-gray-500',
+                    zinc: 'bg-zinc-500',
+                    neutral: 'bg-neutral-500',
+                    stone: 'bg-stone-500',
+                    green: 'bg-green-500',
+                    lightblue: 'bg-blue-400',
+                    mint: 'bg-emerald-400',
+                    gold: 'bg-yellow-400',
+                    coral: 'bg-red-400',
+                    salmon: 'bg-pink-400',
+                    lavender: 'bg-purple-400',
+                    periwinkle: 'bg-indigo-400',
+                    peach: 'bg-orange-400'
+                };
+
+                item.innerHTML = `
+                    <div class="flex items-center gap-2 overflow-hidden flex-1">
+                        <button onclick="toggleAnnotation(${anno.id})" title="個別表示切替" class="w-4 h-4 rounded flex items-center justify-center bg-slate-800 text-[10px] ${anno.enabled ? 'text-blue-400' : 'text-slate-600'} shrink-0">
+                            <i class="fa-solid ${anno.enabled ? 'fa-eye' : 'fa-eye-slash'}"></i>
+                        </button>
+                        <span class="w-2 h-2 rounded-full shrink-0 ${colorBgMap[anno.color] || 'bg-blue-500'}"></span>
+                        <div class="truncate cursor-pointer flex-1" onclick="jumpToAnnotation(${anno.start})">
+                            <div class="font-bold text-slate-200 truncate ${anno.enabled ? '' : 'line-through text-slate-500'}">${escapeHtml(anno.label)}</div>
+                            <div class="text-[10px] text-slate-500">0x${anno.start.toString(16).toUpperCase()} - 0x${anno.end.toString(16).toUpperCase()}</div>
+                        </div>
+                    </div>
+                    <button onclick="removeAnnotation(${anno.id})" class="text-slate-600 hover:text-rose-400 p-1 opacity-80 group-hover:opacity-100 transition">
+                        <i class="fa-solid fa-trash-can text-xs"></i>
+                    </button>
+                `;
+                annoList.appendChild(item);
+            });
+        }
+
+        function jumpToAnnotation(offset) {
+            setCursorOffset(offset);
+            showMobileTab('hex');
+        }
+
+        // ========================================
+        // Annotation LocalStorage
+        // ========================================
+        const ANNO_STORAGE_PREFIX = 'HexStudio.annotations.v1:';
+
+        function getAnnotationStorageKey() {
+            const name = fileName || '__untitled__';
+            const size = fileBuffer ? fileBuffer.length : 0;
+            return ANNO_STORAGE_PREFIX + name + ':' + size;
+        }
+
+        function saveAnnotationsToLocalStorage() {
+            try {
+                localStorage.setItem(getAnnotationStorageKey(), JSON.stringify(annotations));
+                updateAnnotationStorageStatus('保存済み');
+            } catch (err) {
+                updateAnnotationStorageStatus('保存失敗');
+                console.error('タグの保存に失敗:', err);
+            }
+        }
+
+        function loadAnnotationsFromLocalStorage() {
+            try {
+                const raw = localStorage.getItem(getAnnotationStorageKey());
+                if (!raw) return false;
+
+                const saved = JSON.parse(raw);
+                if (!Array.isArray(saved)) return false;
+
+                annotations = saved.map(a => ({
+                    ...a,
+                    enabled: a.enabled !== undefined ? !!a.enabled : true
+                }));
+                renderAnnotationList();
+                updateAnnotationStorageStatus('保存データ読込');
+                return true;
+            } catch (err) {
+                console.error('タグの読み込みに失敗:', err);
+                updateAnnotationStorageStatus('読込失敗');
+                return false;
+            }
+        }
+
+        function updateAnnotationStorageStatus(text) {
+            if (!annoStorageStatus) return;
+            annoStorageStatus.textContent = text || '自動保存';
+        }
+
+        function clearAnnotationStorage() {
+            const key = getAnnotationStorageKey();
+            if (!localStorage.getItem(key)) {
+                updateAnnotationStorageStatus('保存なし');
+                return;
+            }
+
+            if (!confirm('このファイルの保存タグを削除しますか？')) return;
+
+            localStorage.removeItem(key);
+            annotations = [];
+            renderAnnotationList();
+            renderPage();
+            updateInspector();
+            updateAnnotationStorageStatus('削除済み');
+        }
+
+        function applyHexInputChar(char) {
+            if (fileBuffer.length === 0) return;
+            char = String(char).toUpperCase();
+            if (!/^[0-9A-F]$/.test(char)) return;
+
+            const nibble = parseInt(char, 16);
+            let value = fileBuffer[cursorOffset];
+
+            if (hexInputNibble === 0) {
+                // 1文字目: 上位ニブルだけを書き換える。カーソルは同じバイトに残す。
+                value = (nibble << 4) | (value & 0x0F);
+                hexInputNibble = 1;
+            } else {
+                // 2文字目: 下位ニブルを書き換えて、次のバイトへ進む。
+                value = (value & 0xF0) | nibble;
+                hexInputNibble = 0;
+            }
+
+            fileBuffer[cursorOffset] = value;
+            modifiedOffsets.add(cursorOffset);
+            infoFileStatus.textContent = '編集あり';
+            infoFileStatus.className = 'text-amber-400';
+
+            renderPage();
+            updateInspector();
+
+            if (hexInputNibble === 0 && cursorOffset < fileBuffer.length - 1) {
+                setCursorOffset(cursorOffset + 1);
+            }
+        }
+
+        function handleKeyNavigation(e) {
+            if (['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(e.key)) {
+                e.preventDefault();
+                if (e.key === 'ArrowLeft' && cursorOffset > 0) setCursorOffset(cursorOffset - 1);
+                if (e.key === 'ArrowRight' && cursorOffset < fileBuffer.length - 1) setCursorOffset(cursorOffset + 1);
+                if (e.key === 'ArrowUp' && cursorOffset >= bytesPerRow) setCursorOffset(cursorOffset - bytesPerRow);
+                if (e.key === 'ArrowDown' && cursorOffset + bytesPerRow < fileBuffer.length) setCursorOffset(cursorOffset + bytesPerRow);
+            } else if (e.key.length === 1 && /[0-9a-fA-F]/.test(e.key)) {
+                applyHexInputChar(e.key.toUpperCase());
+            }
+        }
+
+        function performJump() {
+            if (!fileBuffer || fileBuffer.length === 0) {
+                alert('先にファイルを読み込んでください。');
+                return;
+            }
+
+            // 0x / 0X を許可して、残りを16進数として解釈
+            const raw = jumpInput.value.trim().replace(/^0x/i, '');
+            if (!raw || !/^[0-9a-fA-F]+$/.test(raw)) {
+                alert('オフセットは16進数で入力してください。例: 0x0012F8F0');
+                jumpInput.focus();
+                return;
+            }
+
+            const offset = Number.parseInt(raw, 16);
+            if (!Number.isSafeInteger(offset) || offset < 0 || offset >= fileBuffer.length) {
+                alert(`範囲外のオフセットです。\n0x00000000 ～ 0x${(fileBuffer.length - 1).toString(16).padStart(8, '0').toUpperCase()}`);
+                jumpInput.focus();
+                return;
+            }
+
+            // モバイルではジャンプ後にHEXエディタ画面へ切り替える
+            // （検索パネルを開いたままだと、ページが移動していてもHEX画面が見えない）
+            showMobileTab('hex');
+
+            // 検索状態による表示を解除して、ジャンプ先を確実に表示
+            searchResults = [];
+            searchIndex = -1;
+
+            cursorOffset = offset;
+            currentPage = Math.floor(offset / PAGE_SIZE);
+
+            // ページを描画してからInspector等を更新
+            renderPage();
+            updatePaginationUI();
+            updateInspector();
+
+            // 入力欄を正規化
+            jumpInput.value = offset.toString(16).toUpperCase().padStart(8, '0');
+
+            // ジャンプしたセルを画面内へスクロール
+            requestAnimationFrame(() => {
+                const cells = hexContainer.querySelectorAll('.hex-cell');
+                const pageStart = currentPage * PAGE_SIZE;
+                const localIndex = offset - pageStart;
+                const target = cells[localIndex];
+                if (target) {
+                    target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+                }
+            });
+        }
+
+        function setCursorOffset(offset, reRender = true) {
+            if (offset < 0 || offset >= fileBuffer.length) return;
+            cursorOffset = offset;
+            hexInputNibble = 0;
+
+            const targetPage = Math.floor(offset / PAGE_SIZE);
+            if (targetPage !== currentPage) {
+                currentPage = targetPage;
+                renderPage();
+            } else if (reRender) {
+                renderPage();
+            }
+
+            const hexStr = cursorOffset.toString(16).padStart(8, '0').toUpperCase();
+            statusOffset.textContent = '0x' + hexStr;
+            keypadOffset.textContent = '0x' + hexStr;
+            quickTagOffset.textContent = cursorOffset.toString(16).toUpperCase();
+            statusHex.textContent = '(0x' + fileBuffer[cursorOffset].toString(16).padStart(2, '0').toUpperCase() + ')';
+
+            updateInspector();
+        }
+
+        function updatePointerInspector() {
+            if (!fileBuffer || fileBuffer.length === 0 || cursorOffset < 0 || cursorOffset >= fileBuffer.length) {
+                inspPointerBytes.textContent = '-- -- -- --';
+                inspPointerLE.textContent = '-';
+                inspPointerBE.textContent = '-';
+                jumpPointerLEBtn.disabled = true;
+                jumpPointerBEBtn.disabled = true;
+                pointerHint.textContent = '4バイト以上ある位置を選択すると解析できます。';
+                return;
+            }
+
+            const bytes = [];
+            for (let i = 0; i < 4; i++) {
+                bytes.push(cursorOffset + i < fileBuffer.length ? fileBuffer[cursorOffset + i] : null);
+            }
+            const complete = bytes.every(b => b !== null);
+            inspPointerBytes.textContent = bytes.map(b => b === null ? '--' : b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
+
+            if (!complete) {
+                inspPointerLE.textContent = '-';
+                inspPointerBE.textContent = '-';
+                jumpPointerLEBtn.disabled = true;
+                jumpPointerBEBtn.disabled = true;
+                pointerHint.textContent = 'この位置から4バイト取得できません。';
+                return;
+            }
+
+            const le = (bytes[0] | (bytes[1] << 8) | (bytes[2] << 16) | (bytes[3] << 24)) >>> 0;
+            const be = ((bytes[0] << 24) | (bytes[1] << 16) | (bytes[2] << 8) | bytes[3]) >>> 0;
+            inspPointerLE.textContent = '0x' + le.toString(16).padStart(8, '0').toUpperCase();
+            inspPointerBE.textContent = '0x' + be.toString(16).padStart(8, '0').toUpperCase();
+
+            const leOffset = gbaPointerToOffset(le);
+            const beOffset = gbaPointerToOffset(be);
+            jumpPointerLEBtn.disabled = leOffset === null;
+            jumpPointerBEBtn.disabled = beOffset === null;
+
+            if (leOffset !== null || beOffset !== null) {
+                const parts = [];
+                if (leOffset !== null) parts.push('LE → ROM 0x' + leOffset.toString(16).padStart(8, '0').toUpperCase());
+                if (beOffset !== null) parts.push('BE → ROM 0x' + beOffset.toString(16).padStart(8, '0').toUpperCase());
+                pointerHint.textContent = parts.join(' / ');
+            } else {
+                pointerHint.textContent = 'GBA ROMポインタとして有効な値がありません。';
+            }
+        }
+
+        function gbaPointerToOffset(value) {
+            // GBA ROM address: 0x08000000 - 0x09FFFFFF
+            if (value < 0x08000000 || value > 0x09FFFFFF) return null;
+            const offset = value - 0x08000000;
+            if (offset < 0 || offset >= fileBuffer.length) return null;
+            return offset;
+        }
+
+        function jumpFromPointer(endian) {
+            if (!fileBuffer || fileBuffer.length === 0 || cursorOffset + 3 >= fileBuffer.length) return;
+
+            const b0 = fileBuffer[cursorOffset];
+            const b1 = fileBuffer[cursorOffset + 1];
+            const b2 = fileBuffer[cursorOffset + 2];
+            const b3 = fileBuffer[cursorOffset + 3];
+            const value = endian === 'le'
+                ? ((b0 | (b1 << 8) | (b2 << 16) | (b3 << 24)) >>> 0)
+                : ((b0 << 24 | b1 << 16 | b2 << 8 | b3) >>> 0);
+            const offset = gbaPointerToOffset(value);
+
+            if (offset === null) {
+                alert('この値は読み込んだROM内を指すGBAポインタではありません。\n0x08000000〜0x09FFFFFF のROMアドレスを選択してください。');
+                return;
+            }
+
+            showMobileTab('hex');
+            searchResults = [];
+            searchIndex = -1;
+            updateSearchUI();
+            cursorOffset = offset;
+            currentPage = Math.floor(offset / PAGE_SIZE);
+            renderPage();
+            updatePaginationUI();
+            updateInspector();
+            jumpInput.value = offset.toString(16).toUpperCase().padStart(8, '0');
+
+            requestAnimationFrame(() => {
+                const cells = hexContainer.querySelectorAll('.hex-cell');
+                const target = cells[offset - currentPage * PAGE_SIZE];
+                if (target) target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+            });
+        }
+
+        // Mega FireRed / uploaded charmap.txt (text definitions through the text-function section).
+        // Longer byte sequences are matched before shorter ones.
+        const DEFAULT_FIRE_RED_CHARMAP = {
+  "00": "　",
+  "01": "あ",
+  "02": "い",
+  "03": "う",
+  "04": "え",
+  "05": "お",
+  "06": "か",
+  "07": "き",
+  "08": "く",
+  "09": "け",
+  "0B": "さ",
+  "0C": "し",
+  "0D": "す",
+  "0E": "せ",
+  "0F": "そ",
+  "10": "た",
+  "11": "ち",
+  "12": "つ",
+  "13": "て",
+  "14": "と",
+  "15": "な",
+  "16": "に",
+  "17": "ぬ",
+  "19": "の",
+  "1A": "は",
+  "1B": "ひ",
+  "1C": "ふ",
+  "1D": "へ",
+  "1E": "ほ",
+  "20": "み",
+  "21": "む",
+  "22": "め",
+  "23": "も",
+  "24": "や",
+  "25": "ゆ",
+  "26": "よ",
+  "27": "ら",
+  "28": "り",
+  "29": "る",
+  "2A": "れ",
+  "2B": "ろ",
+  "2C": "わ",
+  "2D": "を",
+  "2E": "ん",
+  "34": "ゃ",
+  "36": "ょ",
+  "51": "ア",
+  "52": "イ",
+  "53": "ウ",
+  "53 54": "[PKMN]",
+  "55 56 57 58 59": "[POKEBLOCK]",
+  "5A": "コ",
+  "5B": "サ",
+  "5C": "シ",
+  "5D": "ス",
+  "68": "ネ",
+  "6F": "マ",
+  "79": "ル",
+  "7A": "レ",
+  "7B": "ロ",
+  "7C": "ワ",
+  "84": "ャ",
+  "85": "ュ",
+  "86": "ョ",
+  "A0": "ッ",
+  "A1": "0",
+  "A2": "1",
+  "A3": "2",
+  "A4": "3",
+  "A5": "4",
+  "A6": "5",
+  "A7": "6",
+  "A8": "7",
+  "A9": "8",
+  "AA": "9",
+  "AB": "！",
+  "AC": "？",
+  "AD": "。",
+  "AE": "ー",
+  "AF": "·",
+  "B0": "‥",
+  "B1": "“",
+  "B2": "”",
+  "B3": "‘",
+  "B4": "'",
+  "B5": "♂",
+  "B6": "♀",
+  "B7": "¥",
+  "B8": ",",
+  "B9": "×",
+  "BA": "/",
+  "BB": "A",
+  "BC": "B",
+  "BD": "C",
+  "BE": "D",
+  "BF": "E",
+  "C0": "F",
+  "C1": "G",
+  "C2": "H",
+  "C3": "I",
+  "C4": "J",
+  "C5": "K",
+  "C6": "L",
+  "C7": "M",
+  "C8": "N",
+  "C9": "O",
+  "CA": "P",
+  "CB": "Q",
+  "CC": "R",
+  "CD": "S",
+  "CE": "T",
+  "CF": "U",
+  "D0": "V",
+  "D1": "W",
+  "D2": "X",
+  "D3": "Y",
+  "D4": "Z",
+  "D5": "a",
+  "D6": "b",
+  "D7": "c",
+  "D8": "d",
+  "D9": "e",
+  "DA": "f",
+  "DB": "g",
+  "DC": "h",
+  "DD": "i",
+  "DE": "j",
+  "DF": "k",
+  "E0": "l",
+  "E1": "m",
+  "E2": "n",
+  "E3": "o",
+  "E4": "p",
+  "E5": "q",
+  "E6": "r",
+  "E7": "s",
+  "E8": "t",
+  "E9": "u",
+  "EA": "v",
+  "EB": "w",
+  "EC": "x",
+  "ED": "y",
+  "EE": "z",
+  "EF": "▶",
+  "F0": ":",
+  "F1": "Ä",
+  "F2": "Ö",
+  "F3": "Ü",
+  "F4": "ä",
+  "F5": "ö",
+  "F6": "ü",
+  "FC 0C FB": "[TALL_PLUS]",
+  "FF": "$",
+  "0A": "こ",
+  "18": "ね",
+  "1F": "ま",
+  "2F": "ぁ",
+  "30": "ぃ",
+  "31": "ぅ",
+  "32": "ぇ",
+  "33": "ぉ",
+  "35": "ゅ",
+  "37": "が",
+  "38": "ぎ",
+  "39": "ぐ",
+  "3A": "げ",
+  "3B": "ご",
+  "3C": "ざ",
+  "3D": "じ",
+  "3E": "ず",
+  "3F": "ぜ",
+  "40": "ぞ",
+  "41": "だ",
+  "42": "ぢ",
+  "43": "づ",
+  "44": "で",
+  "45": "ど",
+  "46": "ば",
+  "47": "び",
+  "48": "ぶ",
+  "49": "べ",
+  "4A": "ぼ",
+  "4B": "ぱ",
+  "4C": "ぴ",
+  "4D": "ぷ",
+  "4E": "ぺ",
+  "4F": "ぽ",
+  "50": "っ",
+  "54": "エ",
+  "55": "オ",
+  "56": "カ",
+  "57": "キ",
+  "58": "ク",
+  "59": "ケ",
+  "5E": "セ",
+  "5F": "ソ",
+  "60": "タ",
+  "61": "チ",
+  "62": "ツ",
+  "63": "テ",
+  "64": "ト",
+  "65": "ナ",
+  "66": "ニ",
+  "67": "ヌ",
+  "69": "ノ",
+  "6A": "ハ",
+  "6B": "ヒ",
+  "6C": "フ",
+  "6D": "ヘ",
+  "6E": "ホ",
+  "70": "ミ",
+  "71": "ム",
+  "72": "メ",
+  "73": "モ",
+  "74": "ヤ",
+  "75": "ユ",
+  "76": "ヨ",
+  "77": "ラ",
+  "78": "リ",
+  "7D": "ヲ",
+  "7E": "ン",
+  "7F": "ァ",
+  "80": "ィ",
+  "81": "ゥ",
+  "82": "ェ",
+  "83": "ォ",
+  "87": "ガ",
+  "88": "ギ",
+  "89": "グ",
+  "8A": "ゲ",
+  "8B": "ゴ",
+  "8C": "ザ",
+  "8D": "ジ",
+  "8E": "ズ",
+  "8F": "ゼ",
+  "90": "ゾ",
+  "91": "ダ",
+  "92": "ヂ",
+  "93": "ヅ",
+  "94": "デ",
+  "95": "ド",
+  "96": "バ",
+  "97": "ビ",
+  "98": "ブ",
+  "99": "ベ",
+  "9A": "ボ",
+  "9B": "パ",
+  "9C": "ピ",
+  "9D": "プ",
+  "9E": "ペ",
+  "9F": "ポ",
+  "FD": "[STRING]",
+  "FD 01": "[PLAYER]",
+  "FD 02": "[STR_VAR_1]",
+  "FD 03": "[STR_VAR_2]",
+  "FD 04": "[STR_VAR_3]",
+  "FD 05": "[KUN]",
+  "FD 06": "[RIVAL]",
+  "FD 07": "[VERSION]",
+  "FD 08": "[EVIL_TEAM]",
+  "FD 09": "[GOOD_TEAM]",
+  "FD 0A": "[EVIL_LEADER]",
+  "FD 0B": "[GOOD_LEADER]",
+  "FD 0C": "[EVIL_LEGENDARY]",
+  "FD 0D": "[GOOD_LEGENDARY]",
+  "FD 00": "[UNKNOWN_STR]",
+  "FD 0E": "[B_ATK_PARTNER_NAME]",
+  "FD 0F": "[B_ATK_NAME_WITH_PREFIX]",
+  "FD 10": "[B_DEF_NAME_WITH_PREFIX]",
+  "FD 11": "[B_EFF_NAME_WITH_PREFIX]",
+  "FD 12": "[B_ACTIVE_NAME_WITH_PREFIX]",
+  "FD 13": "[B_SCR_ACTIVE_NAME_WITH_PREFIX]",
+  "FD 14": "[B_CURRENT_MOVE]",
+  "FD 15": "[B_LAST_MOVE]",
+  "FD 16": "[B_LAST_ITEM]",
+  "FD 17": "[B_LAST_ABILITY]",
+  "FD 18": "[B_ATK_ABILITY]",
+  "FD 19": "[B_DEF_ABILITY]",
+  "FD 1A": "[B_SCR_ACTIVE_ABILITY]",
+  "FD 1B": "[B_EFF_ABILITY]",
+  "FD 1C": "[B_TRAINER1_CLASS]",
+  "FD 1D": "[B_TRAINER1_NAME]",
+  "FD 1E": "[B_LINK_PLAYER_NAME]",
+  "FD 1F": "[B_LINK_PARTNER_NAME]",
+  "FD 20": "[B_LINK_OPPONENT1_NAME]",
+  "FD 21": "[B_LINK_OPPONENT2_NAME]",
+  "FD 22": "[B_LINK_SCR_TRAINER_NAME]",
+  "FD 23": "[B_PLAYER_NAME]",
+  "FD 24": "[B_TRAINER1_LOSE_TEXT]",
+  "FD 25": "[B_TRAINER1_WIN_TEXT]",
+  "FD 26": "[B_26]",
+  "FD 27": "[B_PC_CREATOR_NAME]",
+  "FD 28": "[B_ATK_PREFIX1]",
+  "FD 29": "[B_DEF_PREFIX1]",
+  "FD 2A": "[B_ATK_PREFIX2]",
+  "FD 2B": "[B_DEF_PREFIX2]",
+  "FD 2C": "[B_ATK_PREFIX3]",
+  "FD 2D": "[B_DEF_PREFIX3]",
+  "FD 2E": "[B_TRAINER2_LOSE_TEXT]",
+  "FD 2F": "[B_TRAINER2_WIN_TEXT]",
+  "FD 30": "[B_BUFF3]",
+  "FC 00": "[NAME_END]",
+  "F7": "[DYNAMIC]",
+  "FC 01": "[COLOR]",
+  "FC 02": "[HIGHLIGHT]",
+  "FC 03": "[SHADOW]",
+  "FC 04": "[COLOR_HIGHLIGHT_SHADOW]",
+  "FC 05": "[PALETTE]",
+  "FC 06": "[FONT]",
+  "FC 07": "[RESET_FONT]",
+  "FC 08": "[PAUSE]",
+  "FC 09": "[PAUSE_UNTIL_PRESS]",
+  "FC 0A": "[WAIT_SE]",
+  "FC 0B": "[PLAY_BGM]",
+  "FC 0C": "[ESCAPE]",
+  "FC 0D": "[SHIFT_RIGHT]",
+  "FC 0E": "[SHIFT_DOWN]",
+  "FC 0F": "[FILL_WINDOW]",
+  "FC 10": "[PLAY_SE]",
+  "FC 11": "[CLEAR]",
+  "FC 12": "[SKIP]",
+  "FC 13": "[CLEAR_TO]",
+  "FC 14": "[MIN_LETTER_SPACING]",
+  "FC 15": "[JPN]",
+  "FC 16": "[ENG]",
+  "FC 17": "[PAUSE_MUSIC]",
+  "FC 18": "[RESUME_MUSIC]",
+  "FC 06 00": "[FONT_SMALL]",
+  "FC 06 01": "[FONT_NORMAL_COPY_1]",
+  "FC 06 02": "[FONT_NORMAL]",
+  "FC 06 03": "[FONT_NORMAL_COPY_2]",
+  "FC 06 04": "[FONT_MALE]",
+  "FC 06 05": "[FONT_FEMALE]",
+  "FA": "↥",
+  "FB": "↵",
+  "FE": "⏎"
+};
+
+        function decodeCharmap(bytes) {
+            if (!charmap.size) return '';
+            const entries = [...charmap.entries()].sort((a, b) => {
+                const al = a[0].split(' ').length;
+                const bl = b[0].split(' ').length;
+                return bl - al;
+            });
+            let out = '';
+            for (let i = 0; i < bytes.length;) {
+                let matched = false;
+                for (const [key, value] of entries) {
+                    const parts = key.split(' ').map(x => parseInt(x, 16));
+                    if (i + parts.length > bytes.length) continue;
+                    let ok = true;
+                    for (let j = 0; j < parts.length; j++) {
+                        if (bytes[i + j] !== parts[j]) { ok = false; break; }
+                    }
+                    if (ok) {
+                        out += value;
+                        i += parts.length;
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched) {
+                    out += `[${bytes[i].toString(16).padStart(2, '0').toUpperCase()}]`;
+                    i++;
+                }
+            }
+            return out;
+        }
+
+        function updateInspector() {
+            if (fileBuffer.length === 0) return;
+            updatePointerInspector();
+            // Update Multiple Overlapping Tags Information in Inspector (consider only enabled tags)
+            const matchedAnnos = annotations.filter(a => a.enabled && cursorOffset >= a.start && cursorOffset <= a.end);
+            if (matchedAnnos.length > 0) {
+                activeTagContainer.classList.remove('hidden');
+                activeTagContainer.innerHTML = '';
+                
+                matchedAnnos.sort((a, b) => a.start !== b.start ? a.start - b.start : (a.end - a.start) - (b.end - b.start));
+                
+                const colorBorderMap = {
+                    blue: 'border-blue-800/80', emerald: 'border-emerald-800/80',
+                    amber: 'border-amber-800/80', rose: 'border-rose-800/80',
+                    purple: 'border-purple-800/80', cyan: 'border-cyan-800/80',
+                    indigo: 'border-indigo-800/80', sky: 'border-sky-800/80',
+                    teal: 'border-teal-800/80', lime: 'border-lime-800/80',
+                    yellow: 'border-yellow-800/80', orange: 'border-orange-800/80',
+                    red: 'border-red-800/80', pink: 'border-pink-800/80',
+                    fuchsia: 'border-fuchsia-800/80', violet: 'border-violet-800/80',
+                    slate: 'border-slate-600/80',
+                    gray: 'border-gray-700/80',
+                    zinc: 'border-zinc-700/80',
+                    neutral: 'border-neutral-700/80',
+                    stone: 'border-stone-700/80',
+                    green: 'border-green-800/80',
+                    lightblue: 'border-blue-700/80',
+                    mint: 'border-emerald-700/80',
+                    gold: 'border-yellow-700/80',
+                    coral: 'border-red-700/80',
+                    salmon: 'border-pink-700/80',
+                    lavender: 'border-purple-700/80',
+                    periwinkle: 'border-indigo-700/80',
+                    peach: 'border-orange-700/80'
+                };
+                const colorTextMap = {
+                    blue: 'text-blue-300', emerald: 'text-emerald-300',
+                    amber: 'text-amber-300', rose: 'text-rose-300',
+                    purple: 'text-purple-300', cyan: 'text-cyan-300',
+                    indigo: 'text-indigo-300', sky: 'text-sky-300',
+                    teal: 'text-teal-300', lime: 'text-lime-300',
+                    yellow: 'text-yellow-300', orange: 'text-orange-300',
+                    red: 'text-red-300', pink: 'text-pink-300',
+                    fuchsia: 'text-fuchsia-300', violet: 'text-violet-300',
+                    slate: 'text-slate-300',
+                    gray: 'text-gray-300',
+                    zinc: 'text-zinc-300',
+                    neutral: 'text-neutral-300',
+                    stone: 'text-stone-300',
+                    green: 'text-green-300',
+                    lightblue: 'text-blue-300',
+                    mint: 'text-emerald-300',
+                    gold: 'text-yellow-300',
+                    coral: 'text-red-300',
+                    salmon: 'text-pink-300',
+                    lavender: 'text-purple-300',
+                    periwinkle: 'text-indigo-300',
+                    peach: 'text-orange-300'
+                };
+
+                matchedAnnos.forEach(anno => {
+                    const div = document.createElement('div');
+                    div.className = `bg-slate-950 p-2.5 rounded border ${colorBorderMap[anno.color] || 'border-slate-800'} space-y-1`;
+                    div.innerHTML = `
+                        <div class="flex items-center justify-between">
+                            <span class="text-xs font-bold ${colorTextMap[anno.color] || 'text-slate-300'} flex items-center gap-1.5">
+                                <i class="fa-solid fa-tag"></i> <span>${escapeHtml(anno.label)}</span>
+                            </span>
+                            <span class="text-[10px] font-mono text-slate-400">0x${anno.start.toString(16).toUpperCase()} - 0x${anno.end.toString(16).toUpperCase()}</span>
+                        </div>
+                        <p class="text-[11px] text-slate-300 leading-snug">${escapeHtml(anno.desc || '（詳細メモなし）')}</p>
+                    `;
+                    activeTagContainer.appendChild(div);
+                });
+            } else {
+                activeTagContainer.classList.add('hidden');
+            }
+
+            const view = new DataView(fileBuffer.buffer, cursorOffset, Math.min(8, fileBuffer.length - cursorOffset));
+
+            const byteVal = fileBuffer[cursorOffset];
+            inspBinary.textContent = byteVal.toString(2).padStart(8, '0');
+            inspAscii.textContent = (byteVal >= 0x20 && byteVal <= 0x7E)
+                ? String.fromCharCode(byteVal)
+                : '.';
+
+            inspInt8.textContent = view.getInt8(0);
+            inspUint8.textContent = view.getUint8(0);
+
+            if (view.byteLength >= 2) {
+                inspInt16.textContent = view.getInt16(0, isLittleEndian);
+                inspUint16.textContent = view.getUint16(0, isLittleEndian);
+            } else {
+                inspInt16.textContent = '-';
+                inspUint16.textContent = '-';
+            }
+
+            if (view.byteLength >= 4) {
+                inspInt32.textContent = view.getInt32(0, isLittleEndian);
+                inspUint32.textContent = view.getUint32(0, isLittleEndian);
+                inspFloat32.textContent = view.getFloat32(0, isLittleEndian).toPrecision(4);
+            } else {
+                inspInt32.textContent = '-';
+                inspUint32.textContent = '-';
+                inspFloat32.textContent = '-';
+            }
+
+            if (view.byteLength >= 8) {
+                inspFloat64.textContent = view.getFloat64(0, isLittleEndian).toPrecision(4);
+            } else {
+                inspFloat64.textContent = '-';
+            }
+        }
+
+        // Mega FireRed charmap: 文字列 -> ROMバイト列
+        function encodeFireRedMapText(input) {
+            const entries = [];
+
+            for (const [hexKey, value] of charmap.entries()) {
+                if (!value || value === '\\x00') continue;
+
+                const bytes = hexKey.trim().split(/\s+/)
+                    .filter(Boolean)
+                    .map(x => parseInt(x, 16));
+
+                if (!bytes.length || bytes.some(n => Number.isNaN(n))) continue;
+
+                entries.push({ value: String(value), bytes });
+            }
+
+            // 長い文字列を優先（多バイトトークンなど）
+            entries.sort((a, b) => {
+                if (b.value.length !== a.value.length) {
+                    return b.value.length - a.value.length;
+                }
+                return b.bytes.length - a.bytes.length;
+            });
+
+            const result = [];
+            let pos = 0;
+
+            while (pos < input.length) {
+                let matched = null;
+
+                for (const entry of entries) {
+                    if (input.startsWith(entry.value, pos)) {
+                        matched = entry;
+                        break;
+                    }
+                }
+
+                if (!matched) {
+                    throw new Error(`MAPに存在しない文字: "${input[pos]}" (位置 ${pos})`);
+                }
+
+                result.push(...matched.bytes);
+                pos += matched.value.length;
+            }
+
+            return result;
+        }
+
+        function performSearch() {
+    const query = searchInput.value.trim();
+
+    // 検索状態をリセット
+    searchResults = [];
+    searchIndex = -1;
+
+    if (!query) {
+        updateSearchUI();
+        return;
+    }
+
+    if (fileBuffer.length === 0) {
+        updateSearchUI();
+        return;
+    }
+
+    // =========================
+    // HEX検索
+    // =========================
+    if (searchMode === 'hex') {
+
+        // 空白を除去
+        const cleanHex = query.replace(/\s+/g, '');
+
+        // 16進数として不正なら終了
+        if (!/^[0-9a-fA-F]+$/.test(cleanHex)) {
+            searchStats.textContent = '一致: 0 / 0';
+            searchResultList.innerHTML = `
+                <div style="
+                    text-align:center;
+                    color:#f87171;
+                    font-size:10px;
+                    padding:8px 0;
+                ">
+                    HEXが正しくありません
+                </div>
+            `;
+            return;
+        }
+
+        // 奇数桁は無効
+        if (cleanHex.length % 2 !== 0) {
+            searchStats.textContent = '一致: 0 / 0';
+            searchResultList.innerHTML = `
+                <div style="
+                    text-align:center;
+                    color:#f87171;
+                    font-size:10px;
+                    padding:8px 0;
+                ">
+                    HEXは2桁ずつ入力してください
+                </div>
+            `;
+            return;
+        }
+
+        const hexBytes = [];
+
+        for (let i = 0; i < cleanHex.length; i += 2) {
+            hexBytes.push(parseInt(cleanHex.substring(i, i + 2), 16));
+        }
+
+        // 全検索
+        for (
+            let i = 0;
+            i <= fileBuffer.length - hexBytes.length;
+            i++
+        ) {
+            let match = true;
+
+            for (let j = 0; j < hexBytes.length; j++) {
+                if (fileBuffer[i + j] !== hexBytes[j]) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                searchResults.push(i);
+            }
+        }
+
+    // =========================
+    // ASCII / UTF-8 テキスト検索
+    // =========================
+    } else if (searchMode === 'text') {
+
+        const encoder = new TextEncoder();
+        const textBytes = encoder.encode(query);
+
+        for (
+            let i = 0;
+            i <= fileBuffer.length - textBytes.length;
+            i++
+        ) {
+            let match = true;
+
+            for (let j = 0; j < textBytes.length; j++) {
+                if (fileBuffer[i + j] !== textBytes[j]) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                searchResults.push(i);
+            }
+        }
+
+    // =========================
+    // Mega FireRed MAP検索
+    // =========================
+    } else if (searchMode === 'map') {
+
+        let mapBytes;
+
+        try {
+            mapBytes = encodeFireRedMapText(query);
+        } catch (e) {
+            searchStats.textContent = '一致: 0 / 0';
+            searchResultList.innerHTML = `
+                <div style="
+                    text-align:center;
+                    color:#f87171;
+                    font-size:10px;
+                    padding:8px 0;
+                ">
+                    ${escapeHtml(e.message)}
+                </div>
+            `;
+            return;
+        }
+
+        if (!mapBytes.length) return;
+
+        for (
+            let i = 0;
+            i <= fileBuffer.length - mapBytes.length;
+            i++
+        ) {
+            let match = true;
+
+            for (let j = 0; j < mapBytes.length; j++) {
+                if (fileBuffer[i + j] !== mapBytes[j]) {
+                    match = false;
+                    break;
+                }
+            }
+
+            if (match) {
+                searchResults.push(i);
+            }
+        }
+    }
+
+    // =========================
+    // 結果あり
+    // =========================
+    if (searchResults.length > 0) {
+
+        searchIndex = 0;
+
+        const firstOffset = searchResults[0];
+
+        // ページ移動
+        currentPage = Math.floor(firstOffset / PAGE_SIZE);
+
+        // カーソル位置
+        cursorOffset = firstOffset;
+
+        // 結果UI更新
+        updateSearchUI();
+
+        // HEX画面更新
+        renderPage();
+
+        // ステータス更新
+        updateInspector();
+
+        return;
+    }
+
+    // =========================
+    // 結果なし
+    // =========================
+    updateSearchUI();
+}
+
+
+
+function navigateSearch(direction) {
+
+    if (searchResults.length === 0) {
+        return;
+    }
+
+    searchIndex =
+        (searchIndex + direction + searchResults.length)
+        % searchResults.length;
+
+    const offset = searchResults[searchIndex];
+
+    cursorOffset = offset;
+    currentPage = Math.floor(offset / PAGE_SIZE);
+
+    updateSearchUI();
+    renderPage();
+    updateInspector();
+}
+
+
+
+
+
+function updateSearchUI() {
+
+    // =========================
+    // 件数表示
+    // =========================
+
+    if (searchResults.length === 0) {
+        searchStats.textContent = '一致: 0 / 0';
+    } else {
+        searchStats.textContent =
+            `一致: ${searchIndex + 1} / ${searchResults.length}`;
+    }
+
+    // =========================
+    // リストを空にする
+    // =========================
+
+    searchResultList.innerHTML = '';
+
+    // =========================
+    // 結果なし
+    // =========================
+
+    if (searchResults.length === 0) {
+
+        const empty = document.createElement('div');
+
+        empty.style.textAlign = 'center';
+        empty.style.color = '#475569';
+        empty.style.fontSize = '10px';
+        empty.style.padding = '8px 0';
+
+        empty.textContent = '検索結果なし';
+
+        searchResultList.appendChild(empty);
+
+        return;
+    }
+
+    // =========================
+    // 検索結果リスト
+    // =========================
+
+    searchResults.forEach((offset, index) => {
+
+        const button = document.createElement('button');
+
+        button.type = 'button';
+
+        // サイズ
+        button.style.display = 'flex';
+        button.style.width = '100%';
+        button.style.boxSizing = 'border-box';
+
+        // 左右配置
+        button.style.justifyContent = 'space-between';
+        button.style.alignItems = 'center';
+
+        // 余白
+        button.style.padding = '6px 8px';
+        button.style.marginBottom = '4px';
+
+        // 見た目
+        button.style.borderRadius = '5px';
+        button.style.border = '1px solid';
+
+        // フォント
+        button.style.fontFamily =
+            'JetBrains Mono, monospace';
+        button.style.fontSize = '10px';
+
+        // 現在選択中
+        if (index === searchIndex) {
+
+            button.style.background = '#78350f';
+            button.style.borderColor = '#f59e0b';
+            button.style.color = '#fde68a';
+
+        } else {
+
+            button.style.background = '#020617';
+            button.style.borderColor = '#1e293b';
+            button.style.color = '#94a3b8';
+        }
+
+        // =========================
+        // 左側
+        // =========================
+
+        const left = document.createElement('span');
+
+        left.style.display = 'flex';
+        left.style.alignItems = 'center';
+        left.style.gap = '8px';
+
+        // 番号
+        const number = document.createElement('span');
+
+        number.style.display = 'inline-block';
+        number.style.width = '20px';
+        number.style.textAlign = 'right';
+        number.style.color = '#64748b';
+
+        number.textContent = String(index + 1);
+
+        // オフセット
+        const address = document.createElement('span');
+
+        address.textContent =
+            '0x' +
+            offset
+                .toString(16)
+                .toUpperCase()
+                .padStart(8, '0');
+
+        left.appendChild(number);
+        left.appendChild(address);
+
+        // =========================
+        // タグ表示
+        // =========================
+        const matchedTags = annotations.filter(a =>
+            a.enabled && offset >= a.start && offset <= a.end
+        );
+
+        const right = document.createElement('span');
+        right.style.display = 'flex';
+        right.style.alignItems = 'center';
+        right.style.gap = '6px';
+        right.style.marginLeft = '8px';
+        right.style.minWidth = '0';
+
+        if (matchedTags.length > 0) {
+            const tagWrap = document.createElement('span');
+            tagWrap.style.display = 'flex';
+            tagWrap.style.gap = '3px';
+            tagWrap.style.flexWrap = 'wrap';
+            tagWrap.style.justifyContent = 'flex-end';
+            matchedTags.forEach(tag => {
+                const tagEl = document.createElement('span');
+                tagEl.style.padding = '1px 4px';
+                tagEl.style.borderRadius = '3px';
+                tagEl.style.fontFamily = 'Inter, sans-serif';
+                tagEl.style.fontSize = '9px';
+                tagEl.style.fontWeight = '600';
+                tagEl.style.background = {blue:'#60a5fa',emerald:'#34d399',amber:'#fbbf24',rose:'#fb7185',purple:'#c084fc',cyan:'#22d3ee'}[tag.color] || '#94a3b8';
+                tagEl.style.color = '#e2e8f0';
+                tagEl.textContent = tag.label || '無題タグ';
+                tagWrap.appendChild(tagEl);
+            });
+            right.appendChild(tagWrap);
+        }
+
+        const type = document.createElement('span');
+        type.style.color = '#64748b';
+        type.textContent = searchMode === 'hex' ? 'HEX' : (searchMode === 'map' ? 'MAP' : 'ASCII');
+        right.appendChild(type);
+        button.appendChild(left);
+        button.appendChild(right);
+
+        // =========================
+        // タップ
+        // =========================
+
+        button.addEventListener('click', () => {
+
+            searchIndex = index;
+
+            // 検索結果を押したら、そのアドレスへ通常のカーソル移動を行う
+            // setCursorOffset() がページ切替・再描画・Inspector更新まで処理する。
+            setCursorOffset(offset);
+
+            // Hex画面へ戻して、ジャンプ先をすぐ確認できるようにする。
+            showMobileTab('hex');
+
+            updateSearchUI();
+
+        });
+
+        searchResultList.appendChild(button);
+    });
+
+    // 現在位置までスクロール
+    const current =
+        searchResultList.children[searchIndex];
+
+    if (current) {
+        current.scrollIntoView({
+            block: 'nearest'
+        });
+    }
+}
+
+
+
+        function updatePaginationUI() {
+            const totalPages = Math.max(1, Math.ceil(fileBuffer.length / PAGE_SIZE));
+            currentPageNum.textContent = (currentPage + 1).toString();
+            totalPagesNum.textContent = totalPages.toString();
+
+            prevPageBtn.disabled = currentPage === 0;
+            nextPageBtn.disabled = currentPage >= totalPages - 1;
+        }
+
+        function downloadFile() {
+            if (fileBuffer.length === 0) return;
+            const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = fileName.replace(/\.[^/.]+$/, '') + '_edited.bin';
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        }
+
+        function formatBytes(bytes) {
+            if (bytes === 0) return '0 Bytes';
+            const k = 1024;
+            const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+            const i = Math.floor(Math.log(bytes) / Math.log(k));
+            return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+        }
+
+        function escapeHtml(str) {
+            return str.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+        }
+    </script>
+<script>
+// HexStudio: 検索機能の独立バインド
+// 他のUI初期化でエラーが出ても検索ボタンだけは動作するようにする。
+(function () {
+    function bindSearch() {
+        const btn = document.getElementById('searchExecuteBtn');
+        const input = document.getElementById('searchInput');
+        const next = document.getElementById('searchNextBtn');
+        const prev = document.getElementById('searchPrevBtn');
+        if (!btn || !input) return;
+
+        btn.onclick = function (e) {
+            e.preventDefault();
+            e.stopPropagation();
+            if (typeof performSearch === 'function') performSearch();
+        };
+        input.onkeydown = function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                if (typeof performSearch === 'function') performSearch();
+            }
+        };
+        if (next) next.onclick = function (e) {
+            e.preventDefault();
+            if (typeof navigateSearch === 'function') navigateSearch(1);
+        };
+        if (prev) prev.onclick = function (e) {
+            e.preventDefault();
+            if (typeof navigateSearch === 'function') navigateSearch(-1);
+        };
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', bindSearch);
+    } else {
+        bindSearch();
+    }
+    window.addEventListener('load', bindSearch);
+})();
+</script>
+</body>
+</html>
