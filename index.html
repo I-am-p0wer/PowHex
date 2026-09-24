@@ -133,9 +133,9 @@
         <div class="flex items-center gap-2">
             <div class="flex items-center gap-1.5 text-blue-400 font-bold text-base md:text-lg">
                 <i class="fa-solid fa-microchip"></i>
-                <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">PowHex</span>
+                <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">HexStudio</span>
             </div>
-            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Mobile</span>
+            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Mobile + Tags</span>
         </div>
 
         <!-- Header Controls -->
@@ -174,7 +174,7 @@
             <!-- Mobile Panel Header -->
             <div class="flex md:hidden items-center justify-between p-3 border-b border-slate-800 bg-slate-900/90 backdrop-blur sticky top-0 z-10">
                 <span id="mobileTabTitle" class="font-bold text-sm text-blue-400 flex items-center gap-2">
-                    <i class="fa-solid fa-tags"></i> Annotation
+                    <i class="fa-solid fa-tags"></i> アノテーション（範囲タグ）
                 </span>
                 <button id="closeMobileTabBtn" class="px-2.5 py-1 bg-slate-800 rounded border border-slate-700 text-xs text-slate-300">
                     <i class="fa-solid fa-xmark"></i> 閉じる
@@ -185,7 +185,7 @@
             <div id="panelAnnotations" class="p-3 md:p-4 border-b border-slate-800 space-y-3">
                 <div class="flex items-center justify-between">
                     <h3 class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
-                        <i class="fa-solid fa-tags text-purple-400"></i> Tag
+                        <i class="fa-solid fa-tags text-purple-400"></i> 範囲タグ一覧
                     </h3>
                     <div class="flex items-center gap-1.5">
                         <span id="annoStorageStatus" class="text-[9px] text-emerald-400">自動保存</span>
@@ -462,7 +462,7 @@
                 <button id="hexDisplayAsciiBtn" class="text-[9px] font-semibold px-2 py-1 rounded bg-blue-950 border border-blue-700 text-blue-300">ASCII</button>
                 <button id="hexDisplayCharmapBtn" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">MAP</button>
                 <button id="hexSpecialColorBtn" title="00/FE/FB/FA/FF/FC/FD/F8/F9 を意味別に色分け" class="text-[9px] font-semibold px-2 py-1 rounded bg-amber-950 border border-amber-700 text-amber-300">制御色 ON</button>
-                <button id="hexAnnotationToggleBtn" title="範囲タグの色表示をON/OFF" class="text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300">Tag ON</button>
+                <button id="hexAnnotationToggleBtn" title="範囲タグの色表示をON/OFF" class="text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300">範囲タグ ON</button>
             </div>
 
             <!-- Dynamic Header Bar for Bytes Columns -->
@@ -552,15 +552,15 @@
     <nav class="md:hidden h-12 bg-slate-900 border-t border-slate-800 flex items-center justify-around px-2 text-xs shrink-0 z-30">
         <button id="tabHexBtn" class="flex flex-col items-center justify-center w-full h-full text-blue-400 font-semibold">
             <i class="fa-solid fa-border-all text-sm mb-0.5"></i>
-            <span class="text-[10px]">Hex Editor</span>
+            <span class="text-[10px]">Hex エディタ</span>
         </button>
         <button id="tabAnnoBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
             <i class="fa-solid fa-tags text-sm mb-0.5"></i>
-            <span class="text-[10px]">Tags</span>
+            <span class="text-[10px]">範囲タグ</span>
         </button>
         <button id="tabSearchBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
             <i class="fa-solid fa-magnifying-glass text-sm mb-0.5"></i>
-            <span class="text-[10px]">Search</span>
+            <span class="text-[10px]">検索</span>
         </button>
         <button id="tabInspectorBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
             <i class="fa-solid fa-sliders text-sm mb-0.5"></i>
@@ -568,7 +568,7 @@
         </button>
         <button id="tabKeypadBtn" class="flex flex-col items-center justify-center w-full h-full text-slate-400 hover:text-slate-200">
             <i class="fa-solid fa-keyboard text-sm mb-0.5"></i>
-            <span class="text-[10px]">Key pad</span>
+            <span class="text-[10px]">キーパッド</span>
         </button>
     </nav>
 
@@ -1122,6 +1122,242 @@ updateSearchUI();
             renderPage();
         }
 
+        // Charmap phrase edit: edit one contiguous normal-text run at once.
+        // 00 is a real space. FF is free space and may be consumed for expansion.
+        function getCharmapTokenEntries() {
+            return [...charmap.entries()].sort((a, b) => {
+                const al = a[0].split(' ').length;
+                const bl = b[0].split(' ').length;
+                return bl - al;
+            }).map(([key, value]) => ({
+                key,
+                value: String(value),
+                bytes: key.trim().split(/\s+/).filter(Boolean).map(x => parseInt(x, 16))
+            }));
+        }
+
+        function decodeCharmapTokenAt(offset, entries) {
+            if (offset >= fileBuffer.length) return null;
+
+            for (const entry of entries) {
+                if (offset + entry.bytes.length > fileBuffer.length) continue;
+                let ok = true;
+                for (let i = 0; i < entry.bytes.length; i++) {
+                    if (fileBuffer[offset + i] !== entry.bytes[i]) {
+                        ok = false;
+                        break;
+                    }
+                }
+                if (ok) {
+                    return {
+                        text: entry.value,
+                        start: offset,
+                        length: entry.bytes.length,
+                        bytes: entry.bytes
+                    };
+                }
+            }
+
+            return {
+                text: `[${fileBuffer[offset].toString(16).padStart(2, '0').toUpperCase()}]`,
+                start: offset,
+                length: 1,
+                bytes: [fileBuffer[offset]]
+            };
+        }
+
+        function isCharmapNormalTextToken(token) {
+            if (!token) return false;
+            // Control / macro / placeholder tokens are displayed in brackets.
+            // They remain HEX-editable and split Charmap text editing ranges.
+            return !(typeof token.text === 'string' && /^\[.*\]$/.test(token.text));
+        }
+
+        function getCharmapPhraseRange(clickedToken) {
+            const entries = getCharmapTokenEntries();
+            let start = clickedToken.start;
+            let end = clickedToken.start + clickedToken.length;
+
+            // Expand backward to the beginning of this contiguous normal-text run.
+            while (start > 0) {
+                const prev = decodeCharmapTokenAt(start - 1, entries);
+                if (!prev || prev.start + prev.length !== start || !isCharmapNormalTextToken(prev)) break;
+                start = prev.start;
+            }
+
+            // Expand forward through normal text.  00 remains normal text (space).
+            while (end < fileBuffer.length) {
+                if (fileBuffer[end] === 0xFF) break;
+                const next = decodeCharmapTokenAt(end, entries);
+                if (!next || !isCharmapNormalTextToken(next)) break;
+                end += next.length;
+            }
+
+            const textEnd = end;
+            let freeEnd = end;
+            // 編集で一度に消費するFF空き領域は最大20 bytesまで。
+            // 大量のFFが続いていても、200 bytesなどを一気に編集対象にはしない。
+            const maxFreeBytes = 20;
+            while (freeEnd < fileBuffer.length && fileBuffer[freeEnd] === 0xFF && (freeEnd - end) < maxFreeBytes) {
+                freeEnd++;
+            }
+
+            return {
+                start,
+                textEnd,
+                freeEnd,
+                originalLength: textEnd - start,
+                capacity: freeEnd - start
+            };
+        }
+
+        function beginCharmapPhraseEdit(token, tokenEl) {
+            if (!token || !tokenEl) return;
+
+            if (!isCharmapNormalTextToken(token)) {
+                setCursorOffset(token.start);
+                return;
+            }
+
+            const range = getCharmapPhraseRange(token);
+            const originalText = decodeCharmap(fileBuffer.slice(range.start, range.textEnd));
+
+            // iPhone向け: 範囲選択を要求せず、専用ダイアログ内のtextareaで全文を編集する。
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4';
+
+            const panel = document.createElement('div');
+            panel.className = 'w-full max-w-md bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4';
+
+            const title = document.createElement('div');
+            title.className = 'text-sm font-semibold text-emerald-300 mb-3';
+            title.textContent = 'Charmap文章編集';
+
+            const currentLabel = document.createElement('div');
+            currentLabel.className = 'text-[10px] text-slate-400 mb-1';
+            currentLabel.textContent = '現在の文章';
+
+            const current = document.createElement('div');
+            current.className = 'mb-3 px-3 py-2 rounded bg-slate-950 border border-slate-800 text-emerald-200 font-mono text-sm whitespace-pre-wrap break-all';
+            current.textContent = originalText || '(空)';
+
+            const editLabel = document.createElement('div');
+            editLabel.className = 'text-[10px] text-slate-400 mb-1';
+            editLabel.textContent = '新しい文字列';
+
+            const input = document.createElement('textarea');
+            input.value = originalText;
+            input.rows = 3;
+            input.autocomplete = 'off';
+            input.spellcheck = false;
+            input.className = 'w-full bg-slate-950 border border-emerald-700 text-emerald-100 rounded-lg px-3 py-2 outline-none focus:border-emerald-400 font-mono text-sm resize-none';
+            input.setAttribute('autocapitalize', 'none');
+            input.setAttribute('autocorrect', 'off');
+            input.setAttribute('enterkeyhint', 'done');
+
+            const info = document.createElement('div');
+            info.className = 'mt-3 grid grid-cols-3 gap-2 text-[10px]';
+            info.innerHTML = `
+                <div class="bg-slate-950 rounded px-2 py-2"><div class="text-slate-500">元の容量</div><div class="text-slate-200">${range.originalLength} bytes</div></div>
+                <div class="bg-slate-950 rounded px-2 py-2"><div class="text-slate-500">FF空き</div><div class="text-slate-200">${range.capacity - range.originalLength} bytes</div></div>
+                <div class="bg-slate-950 rounded px-2 py-2"><div class="text-slate-500">最大容量</div><div class="text-slate-200">${range.capacity} bytes</div></div>`;
+
+            const hint = document.createElement('div');
+            hint.className = 'mt-2 text-[10px] text-slate-500';
+            hint.textContent = 'FFの空きは必要な分だけ使用します。00はスペースとして扱います。';
+
+            const buttons = document.createElement('div');
+            buttons.className = 'flex gap-2 mt-4';
+
+            const cancelBtn = document.createElement('button');
+            cancelBtn.className = 'flex-1 px-3 py-2 rounded-lg bg-slate-800 border border-slate-700 text-slate-300 text-sm';
+            cancelBtn.textContent = 'キャンセル';
+
+            const applyBtn = document.createElement('button');
+            applyBtn.className = 'flex-1 px-3 py-2 rounded-lg bg-emerald-700 border border-emerald-500 text-white text-sm font-semibold';
+            applyBtn.textContent = '適用';
+
+            buttons.append(cancelBtn, applyBtn);
+            panel.append(title, currentLabel, current, editLabel, input, info, hint, buttons);
+            overlay.appendChild(panel);
+            document.body.appendChild(overlay);
+
+            let finished = false;
+            const close = () => {
+                if (finished) return;
+                finished = true;
+                overlay.remove();
+                renderPage();
+            };
+
+            const apply = () => {
+                if (finished) return;
+
+                const text = input.value;
+                if (!text) {
+                    alert('文字を1文字以上入力してください。');
+                    input.focus();
+                    return;
+                }
+
+                let encoded;
+                try {
+                    encoded = encodeFireRedMapText(text);
+                } catch (err) {
+                    alert(err.message || 'Charmapに存在しない文字です。');
+                    input.focus();
+                    return;
+                }
+
+                if (encoded.length > range.capacity) {
+                    alert(`文字列が編集可能範囲を超えています。\n元の文章: ${range.originalLength} bytes\n今回使えるFF空き: ${range.capacity - range.originalLength} bytes（最大20 bytes）\n使用可能: ${range.capacity} bytes\n必要: ${encoded.length} bytes\n\n変更は適用されません。`);
+                    input.focus();
+                    return;
+                }
+
+                // 元の文章領域は余りを00、拡張したFF領域は必要分だけ使用し、残りはFFのまま。
+                for (let i = 0; i < range.capacity; i++) {
+                    const offset = range.start + i;
+                    let value;
+                    if (i < encoded.length) {
+                        value = encoded[i];
+                    } else if (i < range.originalLength) {
+                        value = 0x00;
+                    } else {
+                        value = 0xFF;
+                    }
+
+                    if (offset >= fileBuffer.length) break;
+                    if (fileBuffer[offset] !== value) {
+                        fileBuffer[offset] = value;
+                        modifiedOffsets.add(offset);
+                    }
+                }
+
+                infoFileStatus.textContent = '編集あり';
+                infoFileStatus.className = 'text-amber-400';
+                finished = true;
+                overlay.remove();
+                setCursorOffset(range.start);
+            };
+
+            cancelBtn.addEventListener('click', close);
+            applyBtn.addEventListener('click', apply);
+            overlay.addEventListener('click', (e) => {
+                if (e.target === overlay) close();
+            });
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Escape') {
+                    e.preventDefault();
+                    close();
+                }
+                // iPhoneのtextareaではEnterを改行入力として維持する。
+            });
+
+            input.focus();
+            input.setSelectionRange(input.value.length, input.value.length);
+        }
+
         function applySpecialByteInlineStyle(elem, specialClass) {
             const styles = {
                 'special-space': { color: '#94a3b8', background: 'rgba(100, 116, 139, 0.16)' },
@@ -1233,8 +1469,10 @@ updateSearchUI();
                             const tokenActive = cursorOffset >= token.start && cursorOffset < token.start + token.length;
                             tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre ' + (tokenActive ? 'bg-blue-900 text-blue-200' : 'text-emerald-300');
                             tokenEl.textContent = token.text;
-                            tokenEl.title = '0x' + token.start.toString(16).padStart(6, '0').toUpperCase();
-                            tokenEl.addEventListener('click', () => setCursorOffset(token.start));
+                            tokenEl.title = /^\[.*\]$/.test(token.text)
+                                ? 'HEX側で編集'
+                                : 'タップして文章全体をCharmap編集';
+                            tokenEl.addEventListener('click', () => beginCharmapPhraseEdit(token, tokenEl));
                             asciiGroup.appendChild(tokenEl);
                         });
                     }
