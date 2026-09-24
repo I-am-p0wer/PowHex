@@ -1195,10 +1195,7 @@ updateSearchUI();
 
             const textEnd = end;
             let freeEnd = end;
-            // 編集で一度に消費するFF空き領域は最大20 bytesまで。
-            // 大量のFFが続いていても、200 bytesなどを一気に編集対象にはしない。
-            const maxFreeBytes = 20;
-            while (freeEnd < fileBuffer.length && fileBuffer[freeEnd] === 0xFF && (freeEnd - end) < maxFreeBytes) {
+            while (freeEnd < fileBuffer.length && fileBuffer[freeEnd] === 0xFF) {
                 freeEnd++;
             }
 
@@ -1310,7 +1307,7 @@ updateSearchUI();
                 }
 
                 if (encoded.length > range.capacity) {
-                    alert(`文字列が編集可能範囲を超えています。\n元の文章: ${range.originalLength} bytes\n今回使えるFF空き: ${range.capacity - range.originalLength} bytes（最大20 bytes）\n使用可能: ${range.capacity} bytes\n必要: ${encoded.length} bytes\n\n変更は適用されません。`);
+                    alert(`文字列が編集可能範囲を超えています。\n元の文章: ${range.originalLength} bytes\nFF空き: ${range.capacity - range.originalLength} bytes\n使用可能: ${range.capacity} bytes\n必要: ${encoded.length} bytes\n\n変更は適用されません。`);
                     input.focus();
                     return;
                 }
@@ -2525,7 +2522,10 @@ updateSearchUI();
         }
 
         function performSearch() {
-    const query = searchInput.value.trim();
+    // MAP検索では半角スペースも検索文字として保持する。
+    // Mega FireRedではスペースを00として扱うため、半角スペースをCharmapの空白へ正規化する。
+    const rawQuery = searchInput.value;
+    const query = searchMode === 'map' ? rawQuery.replace(/ /g, '　') : rawQuery.trim();
 
     // 検索状態をリセット
     searchResults = [];
@@ -3010,4 +3010,3 @@ function updateSearchUI() {
 </script>
 </body>
 </html>
-
