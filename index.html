@@ -66,6 +66,21 @@
             outline: 2px solid #fde047;
         }
 
+        .hex-cell.linked, .ascii-cell.linked {
+            background-color: rgba(16, 185, 129, 0.28) !important;
+            color: #a7f3d0 !important;
+            outline: 1px solid rgba(52, 211, 153, 0.55);
+            outline-offset: -1px;
+        }
+        .map-linked {
+            background-color: rgba(16, 185, 129, 0.28) !important;
+            color: #a7f3d0 !important;
+            outline: 1px solid rgba(52, 211, 153, 0.55);
+        }
+        .bookmark-active {
+            box-shadow: inset 0 -2px 0 #f472b6 !important;
+        }
+
         /* Mega FireRed / Charmap special-byte colors */
         .special-space { color: #94a3b8 !important; background-color: rgba(100, 116, 139, 0.16) !important; border-bottom: none !important; }
         .special-newline { color: #67e8f9 !important; background-color: rgba(6, 182, 212, 0.16) !important; border-bottom: none !important; font-weight: 700; }
@@ -158,7 +173,7 @@
                 <i class="fa-solid fa-microchip"></i>
                 <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">HexStudio</span>
             </div>
-            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Mobile + Tags</span>
+            
         </div>
 
         <!-- Header Controls -->
@@ -497,6 +512,9 @@
                 <button id="hexSpecialColorBtn" title="00/FE/FB/FA/FF/FC/FD/F8/F9 を意味別に色分け" class="text-[9px] font-semibold px-2 py-1 rounded bg-amber-950 border border-amber-700 text-amber-300">制御色 ON</button>
                 <button id="hexAnnotationToggleBtn" title="範囲タグの色表示をON/OFF" class="text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300">範囲タグ ON</button>
                 <button id="hexRangeSelectBtn" title="Hex上で開始・終了を選んで範囲選択" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">範囲選択</button>
+                <button id="changeListBtn" title="変更したバイト一覧" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">変更 <span id="changeCountBadge">0</span></button>
+                <button id="bookmarkBtn" title="現在位置をブックマーク" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">☆</button>
+                <button id="bookmarkListBtn" title="ブックマーク一覧" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">★</button>
             </div>
 
             <!-- Dynamic Header Bar for Bytes Columns -->
@@ -646,6 +664,9 @@
         // Schema: { id, start, end, label, desc, color, enabled }
         let annotations = [];
         let selectedColor = 'blue';
+        let linkedRangeStart = null;
+        let linkedRangeEnd = null;
+        let bookmarks = [];
 
         // DOM Element Cache
         const fileInput = document.getElementById('fileInput');
@@ -735,6 +756,10 @@
         const hexSelectionInfo = document.getElementById('hexSelectionInfo');
         const hexSelectionTagBtn = document.getElementById('hexSelectionTagBtn');
         const hexSelectionClearBtn = document.getElementById('hexSelectionClearBtn');
+        const changeListBtn = document.getElementById('changeListBtn');
+        const changeCountBadge = document.getElementById('changeCountBadge');
+        const bookmarkBtn = document.getElementById('bookmarkBtn');
+        const bookmarkListBtn = document.getElementById('bookmarkListBtn');
 
         // Pagination & Zoom Controls
         const statusOffset = document.getElementById('statusOffset');
@@ -798,6 +823,9 @@ const searchResultList = document.getElementById('searchResultList');
             downloadBtn.addEventListener('click', downloadFile);
             undoBtn.addEventListener('click', undoEdit);
             redoBtn.addEventListener('click', redoEdit);
+            changeListBtn.addEventListener('click', showChangeList);
+            bookmarkBtn.addEventListener('click', toggleCurrentBookmark);
+            bookmarkListBtn.addEventListener('click', showBookmarkList);
 
             // Row Width Selection
             bytesPerRowSelect.addEventListener('change', (e) => {
@@ -1060,6 +1088,9 @@ const searchResultList = document.getElementById('searchResultList');
                 modifiedOffsets.clear();
                 undoStack = [];
                 redoStack = [];
+                linkedRangeStart = null;
+                linkedRangeEnd = null;
+                bookmarks = loadBookmarksForCurrentFile();
                 updateHistoryButtons();
                 annotations = [];
                 rangeAnchor = null;
@@ -1105,6 +1136,7 @@ updateSearchUI();
             undoStack = [];
             redoStack = [];
             updateHistoryButtons();
+            updateBookmarkButton();
             currentPage = 0;
             cursorOffset = 0;
             rangeAnchor = null;
@@ -1384,7 +1416,10 @@ updateSearchUI();
             charmapSelectedRange = null;
             const index = tokens.indexOf(token);
             charmapMapPointerState = { tokens, startIndex: index, currentIndex: index, pointerId: e.pointerId, active: true };
+            linkedRangeStart = token.start;
+            linkedRangeEnd = token.start + token.length - 1;
             paintCharmapMapSelection(tokens, index, index);
+            renderPage();
         }
 
         function updateCharmapMapPointerSelection(e, token) {
@@ -1408,6 +1443,9 @@ updateSearchUI();
             const first = selected[0];
             const last = selected[selected.length - 1];
             const originalText = selected.map(t => t.text).join('');
+            linkedRangeStart = first.start;
+            linkedRangeEnd = last.start + last.length - 1;
+            syncLinkedHexVisual();
             // 選択しただけでは編集画面を開かない。
             // iPhoneでは「選択 → 編集」ワンクッションを入れる。
             showCharmapSelectionAction(first.start, last.start + last.length, originalText);
@@ -1424,7 +1462,12 @@ updateSearchUI();
             const index = state.tokens.findIndex(t => t.start === offset);
             if (index < 0 || !isCharmapNormalTextToken(state.tokens[index])) return;
             state.currentIndex = index;
+            const lo = Math.min(state.startIndex, index);
+            const hi = Math.max(state.startIndex, index);
+            linkedRangeStart = state.tokens[lo].start;
+            linkedRangeEnd = state.tokens[hi].start + state.tokens[hi].length - 1;
             paintCharmapMapSelection(state.tokens, state.startIndex, index);
+            syncLinkedHexVisual();
             e.preventDefault();
         }, { passive: false });
 
@@ -1438,6 +1481,118 @@ updateSearchUI();
             clearCharmapMapSelectionVisual();
             charmapMapPointerState = null;
         });
+
+        function syncLinkedHexVisual() {
+            document.querySelectorAll('.hex-cell.linked, .ascii-cell.linked').forEach(el => el.classList.remove('linked'));
+            if (linkedRangeStart === null || linkedRangeEnd === null) return;
+            const start = Math.min(linkedRangeStart, linkedRangeEnd);
+            const end = Math.max(linkedRangeStart, linkedRangeEnd);
+            document.querySelectorAll('.hex-cell[data-offset], .ascii-cell').forEach(el => {
+                const off = Number(el.dataset.offset);
+                if (Number.isFinite(off) && off >= start && off <= end) el.classList.add('linked');
+            });
+        }
+
+        function linkMapToOffset(offset) {
+            if (hexRightDisplayMode !== 'charmap' || !fileBuffer.length) return false;
+            const pageStart = Math.floor(offset / PAGE_SIZE) * PAGE_SIZE;
+            const rowStart = Math.floor(offset / bytesPerRow) * bytesPerRow;
+            const rowEnd = Math.min(rowStart + bytesPerRow, fileBuffer.length);
+            const tokens = decodeCharmapTokens(fileBuffer.slice(rowStart, rowEnd), rowStart);
+            const token = tokens.find(t => offset >= t.start && offset < t.start + t.length);
+            if (!token) return false;
+            linkedRangeStart = token.start;
+            linkedRangeEnd = token.start + token.length - 1;
+            return true;
+        }
+
+        function getBookmarkStorageKey() {
+            return `HexStudio.bookmarks.${fileName}.${fileBuffer.length}`;
+        }
+
+        function loadBookmarksForCurrentFile() {
+            try {
+                const raw = localStorage.getItem(getBookmarkStorageKey());
+                const parsed = raw ? JSON.parse(raw) : [];
+                return Array.isArray(parsed) ? parsed.filter(b => Number.isInteger(b.offset) && b.offset >= 0 && b.offset < fileBuffer.length) : [];
+            } catch (_) { return []; }
+        }
+
+        function saveBookmarks() {
+            try { localStorage.setItem(getBookmarkStorageKey(), JSON.stringify(bookmarks)); } catch (_) {}
+            updateBookmarkButton();
+        }
+
+        function updateBookmarkButton() {
+            if (!bookmarkBtn) return;
+            const active = bookmarks.some(b => b.offset === cursorOffset);
+            bookmarkBtn.textContent = active ? '★' : '☆';
+            bookmarkBtn.className = active
+                ? 'text-[9px] font-semibold px-2 py-1 rounded bg-pink-950 border border-pink-700 text-pink-300'
+                : 'text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500';
+            if (changeCountBadge) changeCountBadge.textContent = String(modifiedOffsets.size);
+        }
+
+        function toggleCurrentBookmark() {
+            if (!fileBuffer.length) return;
+            const idx = bookmarks.findIndex(b => b.offset === cursorOffset);
+            if (idx >= 0) bookmarks.splice(idx, 1);
+            else bookmarks.push({ offset: cursorOffset, label: `0x${cursorOffset.toString(16).toUpperCase().padStart(8, '0')}` });
+            bookmarks.sort((a,b) => a.offset - b.offset);
+            saveBookmarks();
+            renderPage();
+        }
+
+        function jumpToOffset(offset) {
+            if (!fileBuffer.length || offset < 0 || offset >= fileBuffer.length) return;
+            showMobileTab('hex');
+            cursorOffset = offset;
+            currentPage = Math.floor(offset / PAGE_SIZE);
+            if (hexRightDisplayMode === 'charmap') linkMapToOffset(offset);
+            renderPage();
+            updateInspector();
+            requestAnimationFrame(() => {
+                const cells = hexContainer.querySelectorAll('.hex-cell');
+                const target = cells[offset - currentPage * PAGE_SIZE];
+                if (target) target.scrollIntoView({ block: 'center', inline: 'nearest', behavior: 'smooth' });
+            });
+        }
+
+        function showSimpleListModal(title, items, emptyText, formatter, onClick) {
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-[110] bg-black/70 flex items-center justify-center p-4';
+            const panel = document.createElement('div');
+            panel.className = 'w-full max-w-md max-h-[80vh] overflow-hidden bg-slate-900 border border-slate-700 rounded-xl shadow-2xl';
+            const head = document.createElement('div');
+            head.className = 'flex items-center justify-between px-4 py-3 border-b border-slate-800';
+            const h = document.createElement('div'); h.className='font-semibold text-sm text-cyan-300'; h.textContent=title;
+            const close = document.createElement('button'); close.className='text-slate-400 px-2 py-1'; close.textContent='✕';
+            head.append(h,close);
+            const list = document.createElement('div'); list.className='overflow-y-auto max-h-[60vh] p-2';
+            if (!items.length) { const e=document.createElement('div'); e.className='p-5 text-center text-slate-500 text-sm'; e.textContent=emptyText; list.appendChild(e); }
+            items.forEach(item => {
+                const b=document.createElement('button'); b.className='w-full text-left px-3 py-2 rounded-lg hover:bg-slate-800 border-b border-slate-800/60 font-mono text-xs'; b.innerHTML=formatter(item);
+                b.addEventListener('click',()=>{ overlay.remove(); onClick(item); }); list.appendChild(b);
+            });
+            panel.append(head,list); overlay.appendChild(panel); document.body.appendChild(overlay);
+            close.addEventListener('click',()=>overlay.remove());
+            overlay.addEventListener('click',e=>{if(e.target===overlay) overlay.remove();});
+        }
+
+        function showChangeList() {
+            const items = [...modifiedOffsets].sort((a,b)=>a-b);
+            showSimpleListModal('変更一覧', items, '変更されたバイトはありません。', off => {
+                const val = fileBuffer[off];
+                return `<div class="flex justify-between gap-3"><span class="text-amber-300">0x${off.toString(16).toUpperCase().padStart(8,'0')}</span><span class="text-slate-300">${val.toString(16).toUpperCase().padStart(2,'0')}</span></div>`;
+            }, off => jumpToOffset(off));
+        }
+
+        function showBookmarkList() {
+            showSimpleListModal('ブックマーク', bookmarks, 'ブックマークはありません。', b => {
+                const val = fileBuffer[b.offset];
+                return `<div class="flex justify-between gap-3"><span class="text-pink-300">★ ${b.label || `0x${b.offset.toString(16).toUpperCase().padStart(8,'0')}`}</span><span class="text-slate-300">${val.toString(16).toUpperCase().padStart(2,'0')}</span></div>`;
+            }, b => jumpToOffset(b.offset));
+        }
 
         function beginCharmapSelectedRangeEdit(start, end, originalText) {
             if (start >= end) return;
@@ -1902,7 +2057,8 @@ updateSearchUI();
                         rowCharmapTokens.forEach(token => {
                             const tokenEl = document.createElement('span');
                             const tokenActive = cursorOffset >= token.start && cursorOffset < token.start + token.length;
-                            tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : 'text-emerald-300');
+                            const tokenLinked = linkedRangeStart !== null && linkedRangeEnd !== null && token.start <= linkedRangeEnd && (token.start + token.length - 1) >= linkedRangeStart;
+                            tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : tokenLinked ? 'map-linked text-emerald-200' : 'text-emerald-300');
                             tokenEl.style.touchAction = 'none';
                             tokenEl.textContent = token.text;
                             tokenEl.title = /^\[.*\]$/.test(token.text)
@@ -1934,6 +2090,8 @@ updateSearchUI();
                         const val = fileBuffer[byteOffset];
                         const isModified = modifiedOffsets.has(byteOffset);
                         const isActive = byteOffset === cursorOffset;
+                        const isLinked = linkedRangeStart !== null && linkedRangeEnd !== null && byteOffset >= linkedRangeStart && byteOffset <= linkedRangeEnd;
+                        const isBookmarked = bookmarks.some(b => b.offset === byteOffset);
                         const isSearchMatch = searchResults.includes(byteOffset);
                         const isSearchCurrent = searchResults[searchIndex] === byteOffset;
 
@@ -1955,6 +2113,8 @@ updateSearchUI();
                             hexClasses += 'search-current ';
                         } else if (isSearchMatch) {
                             hexClasses += 'search-match ';
+                        } else if (isLinked) {
+                            hexClasses += 'linked ';
                         } else if (specialClass) {
                             hexClasses += specialClass;
                             if (matchedAnnos.length > 0) hexClasses += 'anno-multi ';
@@ -1978,7 +2138,7 @@ updateSearchUI();
                             hexCell.classList.add('range-anchor');
                         }
                         if (isModified) hexCell.classList.add('modified');
-                        if (isModified) asciiCell.classList.add('modified');
+                        if (isBookmarked) hexCell.classList.add('bookmark-active');
                         // 制御色は範囲タグのCSSに絶対に負けないよう、最終的にinline !importantで適用
                         if (!isActive && !isSearchCurrent && !isSearchMatch && specialClass) {
                             applySpecialByteInlineStyle(hexCell, specialClass);
@@ -2018,6 +2178,8 @@ updateSearchUI();
                             asciiClasses += 'search-current ';
                         } else if (isSearchMatch) {
                             asciiClasses += 'search-match ';
+                        } else if (isLinked) {
+                            asciiClasses += 'linked ';
                         } else if (specialClass) {
                             asciiClasses += specialClass;
                             if (matchedAnnos.length > 0) asciiClasses += 'anno-multi ';
@@ -2031,6 +2193,7 @@ updateSearchUI();
                         }
 
                         asciiCell.className = asciiClasses;
+                        if (isBookmarked) asciiCell.classList.add('bookmark-active');
                         // 制御色は範囲タグのCSSに絶対に負けないよう、最終的にinline !importantで適用
                         if (!isActive && !isSearchCurrent && !isSearchMatch && specialClass) {
                             applySpecialByteInlineStyle(asciiCell, specialClass);
@@ -2055,6 +2218,7 @@ updateSearchUI();
             }
 
             hexContainer.appendChild(fragment);
+            updateBookmarkButton();
             updatePaginationUI();
         }
 
@@ -2277,6 +2441,7 @@ updateSearchUI();
             renderPage();
             updateInspector();
             updateHistoryButtons();
+            updateBookmarkButton();
         }
 
         function undoEdit() {
@@ -2399,6 +2564,8 @@ updateSearchUI();
             if (offset < 0 || offset >= fileBuffer.length) return;
             cursorOffset = offset;
             hexInputNibble = 0;
+            if (hexRightDisplayMode === 'charmap') linkMapToOffset(offset);
+            updateBookmarkButton();
 
             const targetPage = Math.floor(offset / PAGE_SIZE);
             if (targetPage !== currentPage) {
