@@ -54,6 +54,7 @@
         .hex-cell.modified, .ascii-cell.modified {
             color: #fbbf24;
             font-weight: 600;
+            box-shadow: inset 0 -2px 0 #fbbf24;
         }
         .hex-cell.search-match, .ascii-cell.search-match {
             background-color: #854d0e !important;
@@ -129,6 +130,17 @@
             box-shadow: inset 0 -2px 0 rgba(250, 204, 21, 0.95);
         }
 
+        /* History controls */
+        #undoBtn:disabled, #redoBtn:disabled { opacity: .3; cursor: not-allowed; }
+        /* Mobile: keep the byte/charmap columns visible and aligned from the left. */
+        #hexContainer { overflow-x: auto; }
+        #hexContainer > .hex-row { min-width: max-content; }
+        #hexHeaderBar { min-width: max-content; justify-content: flex-start !important; padding-left: 4px !important; padding-right: 4px !important; }
+        .hex-offset-col { width: 3.5rem !important; }
+        .hex-bytes-col { flex: 0 0 auto !important; justify-content: flex-start !important; gap: 3px !important; padding-left: 2px !important; padding-right: 2px !important; }
+        .hex-right-col { flex: 0 0 8.5rem !important; width: 8.5rem !important; justify-content: flex-start !important; padding-left: 2px !important; padding-right: 2px !important; }
+        @media (min-width: 640px) { .hex-right-col { flex-basis: 11rem !important; width: 11rem !important; } }
+
         /* Prevent elastic bounce on iOS */
         body, html {
             overscroll-behavior: none;
@@ -164,6 +176,16 @@
                 <span class="hidden sm:inline">ファイル開く</span>
             </label>
             <input type="file" id="fileInput" class="hidden" />
+
+            <!-- Undo / Redo -->
+            <div class="flex items-center gap-1">
+                <button id="undoBtn" disabled title="元に戻す" class="p-1.5 md:px-2.5 md:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-700 transition">
+                    <i class="fa-solid fa-rotate-left"></i><span class="hidden md:inline ml-1">戻す</span>
+                </button>
+                <button id="redoBtn" disabled title="やり直す" class="p-1.5 md:px-2.5 md:py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-medium rounded-md border border-slate-700 transition">
+                    <i class="fa-solid fa-rotate-right"></i><span class="hidden md:inline ml-1">やり直す</span>
+                </button>
+            </div>
 
             <!-- Save File -->
             <button id="downloadBtn" disabled class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs font-semibold rounded-md border border-slate-700 transition">
@@ -598,6 +620,9 @@
         const PAGE_SIZE = 2048; // 2KB per page
         let fileBuffer = new Uint8Array(0);
         let modifiedOffsets = new Set();
+        const MAX_HISTORY = 50;
+        let undoStack = [];
+        let redoStack = [];
         let fileName = '未選択';
         let cursorOffset = 0;
         // HEXキーパッド入力中のニブル位置: 0=上位4bit, 1=下位4bit
@@ -625,6 +650,8 @@
         // DOM Element Cache
         const fileInput = document.getElementById('fileInput');
         const downloadBtn = document.getElementById('downloadBtn');
+        const undoBtn = document.getElementById('undoBtn');
+        const redoBtn = document.getElementById('redoBtn');
         const demoBtn = document.getElementById('demoBtn');
         const emptyLoadDemoBtn = document.getElementById('emptyLoadDemoBtn');
         const hexContainer = document.getElementById('hexContainer');
@@ -769,6 +796,8 @@ const searchResultList = document.getElementById('searchResultList');
             demoBtn.addEventListener('click', loadSampleData);
             emptyLoadDemoBtn.addEventListener('click', loadSampleData);
             downloadBtn.addEventListener('click', downloadFile);
+            undoBtn.addEventListener('click', undoEdit);
+            redoBtn.addEventListener('click', redoEdit);
 
             // Row Width Selection
             bytesPerRowSelect.addEventListener('change', (e) => {
@@ -832,6 +861,8 @@ const searchResultList = document.getElementById('searchResultList');
             padNavPrev.addEventListener('click', () => { if (cursorOffset > 0) setCursorOffset(cursorOffset - 1); });
             padNavNext.addEventListener('click', () => { if (cursorOffset < fileBuffer.length - 1) setCursorOffset(cursorOffset + 1); });
             padBackspace.addEventListener('click', () => {
+                if (fileBuffer.length === 0) return;
+                recordEditHistory();
                 hexInputNibble = 0;
                 fileBuffer[cursorOffset] = 0x00;
                 modifiedOffsets.add(cursorOffset);
@@ -1027,6 +1058,9 @@ const searchResultList = document.getElementById('searchResultList');
                 fileBuffer = new Uint8Array(e.target.result);
                 fileName = file.name;
                 modifiedOffsets.clear();
+                undoStack = [];
+                redoStack = [];
+                updateHistoryButtons();
                 annotations = [];
                 rangeAnchor = null;
                 selectionStart = null;
@@ -1068,6 +1102,9 @@ updateSearchUI();
             fileBuffer = buffer;
             fileName = 'sample_binary.bin';
             modifiedOffsets.clear();
+            undoStack = [];
+            redoStack = [];
+            updateHistoryButtons();
             currentPage = 0;
             cursorOffset = 0;
             rangeAnchor = null;
@@ -1104,12 +1141,12 @@ updateSearchUI();
         function renderHeaderBar() {
             hexHeaderBar.innerHTML = '';
             const offsetHeader = document.createElement('div');
-            offsetHeader.className = 'w-16 sm:w-20 shrink-0 font-bold text-slate-400';
+            offsetHeader.className = 'hex-offset-col w-16 sm:w-20 shrink-0 font-bold text-slate-400';
             offsetHeader.textContent = 'Offset';
             hexHeaderBar.appendChild(offsetHeader);
 
             const hexCols = document.createElement('div');
-            hexCols.className = 'flex-1 flex gap-1.5 sm:gap-2 justify-start px-1 sm:px-2 font-bold text-slate-400';
+            hexCols.className = 'hex-bytes-col flex-1 flex gap-1.5 sm:gap-2 justify-start px-1 sm:px-2 font-bold text-slate-400';
 
             for (let i = 0; i < bytesPerRow; i++) {
                 if (i > 0 && i % 8 === 0) {
@@ -1126,7 +1163,7 @@ updateSearchUI();
             hexHeaderBar.appendChild(hexCols);
 
             const asciiHeader = document.createElement('div');
-            asciiHeader.className = 'w-20 sm:w-36 shrink-0 px-1 font-bold text-slate-400 text-right sm:text-left';
+            asciiHeader.className = 'hex-right-col w-20 sm:w-36 shrink-0 px-1 font-bold text-slate-400 text-left';
             asciiHeader.textContent = hexRightDisplayMode === 'charmap' ? 'Charmap' : 'ASCII';
             hexHeaderBar.appendChild(asciiHeader);
         }
@@ -1482,6 +1519,7 @@ updateSearchUI();
                     return;
                 }
 
+                recordEditHistory();
                 for (let i = 0; i < capacity; i++) {
                     const off = start + i;
                     const value = i < encoded.length ? encoded[i] : 0xFF;
@@ -1613,6 +1651,7 @@ updateSearchUI();
                 }
 
                 // 元の文章領域は余りを00、拡張したFF領域は必要分だけ使用し、残りはFFのまま。
+                recordEditHistory();
                 for (let i = 0; i < range.capacity; i++) {
                     const offset = range.start + i;
                     let value;
@@ -1831,23 +1870,23 @@ updateSearchUI();
 
             for (let rowOffset = pageStart; rowOffset < pageEnd; rowOffset += bytesPerRow) {
                 const rowElem = document.createElement('div');
-                rowElem.className = 'flex items-center hover:bg-slate-900/60 rounded px-0.5 py-0.5 group';
+                rowElem.className = 'hex-row flex items-center hover:bg-slate-900/60 rounded px-0.5 py-0.5 group';
 
                 // Offset Column
                 const offsetElem = document.createElement('div');
-                offsetElem.className = 'w-16 sm:w-20 shrink-0 text-slate-500 font-mono text-[11px] select-none';
+                offsetElem.className = 'hex-offset-col w-16 sm:w-20 shrink-0 text-slate-500 font-mono text-[11px] select-none';
                 offsetElem.textContent = rowOffset.toString(16).padStart(6, '0').toUpperCase();
                 rowElem.appendChild(offsetElem);
 
                 // Hex Bytes Column
                 const hexGroup = document.createElement('div');
-                hexGroup.className = 'flex-1 flex gap-1 sm:gap-2 justify-start px-1 sm:px-2 font-mono';
+                hexGroup.className = 'hex-bytes-col flex-1 flex gap-1 sm:gap-2 justify-start px-1 sm:px-2 font-mono';
 
                 // ASCII / Charmap Column
                 const asciiGroup = document.createElement('div');
                 asciiGroup.className = hexRightDisplayMode === 'charmap'
-                    ? 'w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400 overflow-hidden'
-                    : 'w-20 sm:w-36 shrink-0 px-1 font-mono flex items-center justify-end sm:justify-start tracking-normal sm:tracking-widest text-slate-400 overflow-hidden';
+                    ? 'hex-right-col w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400 overflow-hidden'
+                    : 'hex-right-col w-20 sm:w-36 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal sm:tracking-widest text-slate-400 overflow-hidden';
 
                 const rowCharmapTokens = hexRightDisplayMode === 'charmap'
                     ? decodeCharmapTokens(fileBuffer.slice(rowOffset, Math.min(rowOffset + bytesPerRow, fileBuffer.length)), rowOffset)
@@ -1938,6 +1977,8 @@ updateSearchUI();
                         if (rangeAnchor === byteOffset) {
                             hexCell.classList.add('range-anchor');
                         }
+                        if (isModified) hexCell.classList.add('modified');
+                        if (isModified) asciiCell.classList.add('modified');
                         // 制御色は範囲タグのCSSに絶対に負けないよう、最終的にinline !importantで適用
                         if (!isActive && !isSearchCurrent && !isSearchMatch && specialClass) {
                             applySpecialByteInlineStyle(hexCell, specialClass);
@@ -2213,6 +2254,51 @@ updateSearchUI();
             updateAnnotationStorageStatus('削除済み');
         }
 
+        function captureEditState() {
+            return {
+                buffer: new Uint8Array(fileBuffer),
+                modified: new Set(modifiedOffsets)
+            };
+        }
+
+        function recordEditHistory() {
+            if (!fileBuffer.length) return;
+            undoStack.push(captureEditState());
+            if (undoStack.length > MAX_HISTORY) undoStack.shift();
+            redoStack = [];
+            updateHistoryButtons();
+        }
+
+        function restoreEditState(state) {
+            fileBuffer = new Uint8Array(state.buffer);
+            modifiedOffsets = new Set(state.modified);
+            infoFileStatus.textContent = modifiedOffsets.size ? '編集あり' : '未編集';
+            infoFileStatus.className = modifiedOffsets.size ? 'text-amber-400' : 'text-slate-400';
+            renderPage();
+            updateInspector();
+            updateHistoryButtons();
+        }
+
+        function undoEdit() {
+            if (!undoStack.length) return;
+            redoStack.push(captureEditState());
+            const state = undoStack.pop();
+            restoreEditState(state);
+        }
+
+        function redoEdit() {
+            if (!redoStack.length) return;
+            undoStack.push(captureEditState());
+            const state = redoStack.pop();
+            restoreEditState(state);
+        }
+
+        function updateHistoryButtons() {
+            if (!undoBtn || !redoBtn) return;
+            undoBtn.disabled = undoStack.length === 0;
+            redoBtn.disabled = redoStack.length === 0;
+        }
+
         function applyHexInputChar(char) {
             if (fileBuffer.length === 0) return;
             char = String(char).toUpperCase();
@@ -2222,6 +2308,7 @@ updateSearchUI();
             let value = fileBuffer[cursorOffset];
 
             if (hexInputNibble === 0) {
+                recordEditHistory();
                 // 1文字目: 上位ニブルだけを書き換える。カーソルは同じバイトに残す。
                 value = (nibble << 4) | (value & 0x0F);
                 hexInputNibble = 1;
