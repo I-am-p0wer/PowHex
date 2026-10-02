@@ -4,8 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>HexStudio - Mobile Hex Editor with Annotations</title>
-    <link rel="icon" href="favicon.ico">
-    <link rel="apple-touch-icon" href="icon.png">
     <!-- Tailwind CSS -->
     <script src="https://cdn.tailwindcss.com"></script>
     <!-- FontAwesome Icons -->
@@ -156,7 +154,67 @@
         .hex-offset-col { width: 3.5rem !important; }
         .hex-bytes-col { flex: 0 0 auto !important; justify-content: flex-start !important; gap: 3px !important; padding-left: 2px !important; padding-right: 2px !important; }
         .hex-right-col { flex: 0 0 8.5rem !important; width: 8.5rem !important; justify-content: flex-start !important; padding-left: 2px !important; padding-right: 2px !important; }
+        .hex-right-col.charmap-scroll { overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch; touch-action: pan-x; scrollbar-width: thin; }
+        .hex-right-col.charmap-scroll .charmap-row-inner { min-width: max-content; display: inline-flex; align-items: center; gap: 0.18rem; padding-right: 0.75rem; }
+        .charmap-token-touch { display: inline-flex; align-items: center; min-height: 2rem; min-width: 1.35rem; padding: 0 0.22rem !important; justify-content: center; }
+        @media (max-width: 639px) { .charmap-token-touch { min-height: 2.25rem; min-width: 1.5rem; } }
+
         @media (min-width: 640px) { .hex-right-col { flex-basis: 11rem !important; width: 11rem !important; } }
+
+        /* iPhone touch-friendly sizing: slightly larger cells/buttons without changing desktop layout. */
+        @media (max-width: 639px) and (orientation: portrait) {
+            #hexContainer { font-size: 0.82rem !important; }
+            .hex-cell {
+                min-width: 1.65rem !important;
+                width: 1.65rem !important;
+                min-height: 2rem !important;
+                line-height: 2rem !important;
+                font-size: 0.82rem !important;
+            }
+            .hex-offset-col {
+                width: 4.15rem !important;
+                font-size: 0.72rem !important;
+            }
+            .hex-right-col {
+                flex-basis: 10rem !important;
+                width: 10rem !important;
+                font-size: 0.88rem !important;
+                min-height: 2rem;
+            }
+            #hexHeaderBar { font-size: 0.72rem !important; }
+            #hexHeaderBar > * { min-height: 2rem; }
+        }
+
+        /* Landscape iPhone/iPad: use the extra width, keep the editor vertically compact. */
+        @media (orientation: landscape) and (max-height: 700px) {
+            header { height: 2.75rem !important; min-height: 2.75rem !important; }
+            #hexContainer {
+                padding-left: 0.35rem !important;
+                padding-right: 0.35rem !important;
+                padding-top: 0.25rem !important;
+                padding-bottom: 0.25rem !important;
+                font-size: 0.78rem !important;
+            }
+            #hexHeaderBar { height: 1.9rem !important; padding-left: 0.35rem !important; padding-right: 0.35rem !important; font-size: 0.68rem !important; }
+            .hex-row { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }
+            .hex-cell {
+                min-width: 1.5rem !important;
+                width: 1.5rem !important;
+                min-height: 1.75rem !important;
+                line-height: 1.75rem !important;
+                font-size: 0.76rem !important;
+            }
+            .hex-offset-col { width: 3.8rem !important; font-size: 0.68rem !important; }
+            .hex-bytes-col { gap: 2px !important; }
+            .hex-right-col {
+                flex-basis: 13rem !important;
+                width: 13rem !important;
+                min-height: 1.75rem;
+                font-size: 0.82rem !important;
+            }
+            /* Keep the top controls usable while giving the editor more height. */
+            #hexContainer .hex-row { min-height: 1.95rem; }
+        }
 
         /* Prevent elastic bounce on iOS */
         body, html {
@@ -175,7 +233,7 @@
                 <i class="fa-solid fa-microchip"></i>
                 <span class="bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">HexStudio</span>
             </div>
-            
+            <span class="text-[10px] text-slate-400 bg-slate-800 px-1.5 py-0.5 rounded border border-slate-700">Mobile + Tags</span>
         </div>
 
         <!-- Header Controls -->
@@ -514,6 +572,7 @@
                 <button id="hexSpecialColorBtn" title="00/FE/FB/FA/FF/FC/FD/F8/F9 を意味別に色分け" class="text-[9px] font-semibold px-2 py-1 rounded bg-amber-950 border border-amber-700 text-amber-300">制御色 ON</button>
                 <button id="hexAnnotationToggleBtn" title="範囲タグの色表示をON/OFF" class="text-[9px] font-semibold px-2 py-1 rounded bg-purple-950 border border-purple-700 text-purple-300">範囲タグ ON</button>
                 <button id="hexRangeSelectBtn" title="Hex上で開始・終了を選んで範囲選択" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">範囲選択</button>
+                <button id="hexPasteBtn" title="01 02 03 FE のようなHexを貼り付け" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">HEX貼付</button>
                 <button id="changeListBtn" title="変更したバイト一覧" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">変更 <span id="changeCountBadge">0</span></button>
                 <button id="bookmarkBtn" title="現在位置をブックマーク" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">☆</button>
                 <button id="bookmarkListBtn" title="ブックマーク一覧" class="text-[9px] font-semibold px-2 py-1 rounded bg-slate-900 border border-slate-700 text-slate-500">★</button>
@@ -776,6 +835,7 @@
 
         // Search & Jump Controls
         const jumpInput = document.getElementById('jumpInput');
+        const hexPasteBtn = document.getElementById('hexPasteBtn');
         const jumpBtn = document.getElementById('jumpBtn');
         const searchInput = document.getElementById('searchInput');
         const searchExecuteBtn = document.getElementById('searchExecuteBtn');
@@ -825,6 +885,7 @@ const searchResultList = document.getElementById('searchResultList');
             downloadBtn.addEventListener('click', downloadFile);
             undoBtn.addEventListener('click', undoEdit);
             redoBtn.addEventListener('click', redoEdit);
+            hexPasteBtn.addEventListener('click', showHexPasteModal);
             changeListBtn.addEventListener('click', showChangeList);
             bookmarkBtn.addEventListener('click', toggleCurrentBookmark);
             bookmarkListBtn.addEventListener('click', showBookmarkList);
@@ -1413,15 +1474,35 @@ updateSearchUI();
                 setCursorOffset(token.start);
                 return;
             }
-            e.preventDefault();
+            // 縦画面ではMAPを横スクロールする操作と範囲選択が競合しやすい。
+            // pointerdownでは選択を開始せず、短い横スワイプはブラウザのスクロールに任せる。
             clearCharmapSelectionAction();
             charmapSelectedRange = null;
+            if (charmapMapPointerState && charmapMapPointerState.timer) clearTimeout(charmapMapPointerState.timer);
             const index = tokens.indexOf(token);
-            charmapMapPointerState = { tokens, startIndex: index, currentIndex: index, pointerId: e.pointerId, active: true };
-            linkedRangeStart = token.start;
-            linkedRangeEnd = token.start + token.length - 1;
-            paintCharmapMapSelection(tokens, index, index);
-            renderPage();
+            const state = {
+                tokens,
+                startIndex: index,
+                currentIndex: index,
+                pointerId: e.pointerId,
+                active: false,
+                cancelled: false,
+                startX: e.clientX,
+                startY: e.clientY,
+                timer: null
+            };
+            state.timer = setTimeout(() => {
+                if (state.cancelled || charmapMapPointerState !== state) return;
+                state.active = true;
+                linkedRangeStart = token.start;
+                linkedRangeEnd = token.start + token.length - 1;
+                paintCharmapMapSelection(tokens, index, index);
+                syncLinkedHexVisual();
+                if (tokenEl.setPointerCapture) {
+                    try { tokenEl.setPointerCapture(e.pointerId); } catch (_) {}
+                }
+            }, 300);
+            charmapMapPointerState = state;
         }
 
         function updateCharmapMapPointerSelection(e, token) {
@@ -1456,7 +1537,20 @@ updateSearchUI();
         // iPhone/Android: 指をそのまま左右に滑らせてMAP文字を範囲選択する。
         document.addEventListener('pointermove', (e) => {
             const state = charmapMapPointerState;
-            if (!state || !state.active || e.pointerId !== state.pointerId) return;
+            if (!state || e.pointerId !== state.pointerId) return;
+            const dx = e.clientX - state.startX;
+            const dy = e.clientY - state.startY;
+            const moved = Math.hypot(dx, dy);
+            if (!state.active) {
+                // 横スクロールの開始を検知したら選択待ちを解除してスクロールを優先。
+                if (moved > 10) {
+                    state.cancelled = true;
+                    if (state.timer) clearTimeout(state.timer);
+                    state.timer = null;
+                    charmapMapPointerState = null;
+                }
+                return;
+            }
             const el = document.elementFromPoint(e.clientX, e.clientY);
             const target = el && el.closest ? el.closest('[data-map-start]') : null;
             if (!target) return;
@@ -1475,11 +1569,20 @@ updateSearchUI();
 
         document.addEventListener('pointerup', (e) => {
             if (!charmapMapPointerState || e.pointerId !== charmapMapPointerState.pointerId) return;
+            const state = charmapMapPointerState;
+            if (state.timer) clearTimeout(state.timer);
+            state.timer = null;
+            if (!state.active) {
+                charmapMapPointerState = null;
+                return;
+            }
             finishCharmapMapPointerSelection(e);
         });
 
         document.addEventListener('pointercancel', (e) => {
             if (!charmapMapPointerState || e.pointerId !== charmapMapPointerState.pointerId) return;
+            const state = charmapMapPointerState;
+            if (state.timer) clearTimeout(state.timer);
             clearCharmapMapSelectionVisual();
             charmapMapPointerState = null;
         });
@@ -2042,7 +2145,7 @@ updateSearchUI();
                 // ASCII / Charmap Column
                 const asciiGroup = document.createElement('div');
                 asciiGroup.className = hexRightDisplayMode === 'charmap'
-                    ? 'hex-right-col w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400 overflow-hidden'
+                    ? 'hex-right-col charmap-scroll w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400'
                     : 'hex-right-col w-20 sm:w-36 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal sm:tracking-widest text-slate-400 overflow-hidden';
 
                 const rowCharmapTokens = hexRightDisplayMode === 'charmap'
@@ -2056,12 +2159,15 @@ updateSearchUI();
                         emptyMap.textContent = '-';
                         asciiGroup.appendChild(emptyMap);
                     } else {
+                        const charmapInner = document.createElement('div');
+                        charmapInner.className = 'charmap-row-inner';
+                        asciiGroup.appendChild(charmapInner);
                         rowCharmapTokens.forEach(token => {
                             const tokenEl = document.createElement('span');
                             const tokenActive = cursorOffset >= token.start && cursorOffset < token.start + token.length;
                             const tokenLinked = linkedRangeStart !== null && linkedRangeEnd !== null && token.start <= linkedRangeEnd && (token.start + token.length - 1) >= linkedRangeStart;
-                            tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : tokenLinked ? 'map-linked text-emerald-200' : 'text-emerald-300');
-                            tokenEl.style.touchAction = 'none';
+                            tokenEl.className = 'charmap-token-touch cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : tokenLinked ? 'map-linked text-emerald-200' : 'text-emerald-300');
+                            tokenEl.style.touchAction = 'pan-x';
                             tokenEl.textContent = token.text;
                             tokenEl.title = /^\[.*\]$/.test(token.text)
                                 ? 'HEX側で編集'
@@ -2073,7 +2179,7 @@ updateSearchUI();
                                 // pointerupで既に部分編集を開始しているので、通常のclickでは二重起動しない。
                                 e.preventDefault();
                             });
-                            asciiGroup.appendChild(tokenEl);
+                            charmapInner.appendChild(tokenEl);
                         });
                     }
                 }
@@ -2464,6 +2570,65 @@ updateSearchUI();
             if (!undoBtn || !redoBtn) return;
             undoBtn.disabled = undoStack.length === 0;
             redoBtn.disabled = redoStack.length === 0;
+        }
+
+        function showHexPasteModal() {
+            if (!fileBuffer.length) {
+                alert('先にファイルを読み込んでください。');
+                return;
+            }
+            const overlay = document.createElement('div');
+            overlay.className = 'fixed inset-0 z-[100] bg-black/70 flex items-center justify-center p-4';
+            overlay.innerHTML = `
+                <div class="w-full max-w-md bg-slate-900 border border-slate-700 rounded-xl shadow-2xl p-4">
+                    <div class="flex items-center justify-between mb-3">
+                        <div class="font-bold text-slate-100">HEXを貼り付け</div>
+                        <button type="button" id="hexPasteClose" class="text-slate-400 text-xl px-2">×</button>
+                    </div>
+                    <div class="text-[11px] text-slate-400 mb-2">例: <span class="font-mono text-emerald-300">01 02 03 04 05 FE</span>　改行・カンマもOK</div>
+                    <textarea id="hexPasteText" spellcheck="false" autocomplete="off" class="w-full h-32 bg-slate-950 border border-slate-700 rounded-lg p-3 font-mono text-sm text-slate-100 outline-none focus:border-blue-500" placeholder="01 02 03 04 05 FE"></textarea>
+                    <div class="flex items-center justify-between mt-3 gap-2">
+                        <span id="hexPasteInfo" class="text-[11px] text-slate-500">書き込み位置: 0x${cursorOffset.toString(16).toUpperCase().padStart(8,'0')}</span>
+                        <div class="flex gap-2">
+                            <button type="button" id="hexPasteCancel" class="px-3 py-2 rounded-lg bg-slate-800 text-slate-300 text-xs">キャンセル</button>
+                            <button type="button" id="hexPasteApply" class="px-3 py-2 rounded-lg bg-blue-600 text-white text-xs font-semibold">貼り付け</button>
+                        </div>
+                    </div>
+                </div>`;
+            document.body.appendChild(overlay);
+            const ta = overlay.querySelector('#hexPasteText');
+            const close = () => overlay.remove();
+            overlay.querySelector('#hexPasteClose').onclick = close;
+            overlay.querySelector('#hexPasteCancel').onclick = close;
+            overlay.addEventListener('click', e => { if (e.target === overlay) close(); });
+            overlay.querySelector('#hexPasteApply').onclick = () => {
+                const raw = ta.value.trim();
+                const tokens = raw.replace(/0x/gi, ' ').split(/[\s,;|]+/).filter(Boolean);
+                if (!tokens.length || tokens.some(x => !/^[0-9a-fA-F]{1,2}$/.test(x))) {
+                    alert('Hex形式が正しくありません。例: 01 02 03 FE');
+                    ta.focus();
+                    return;
+                }
+                const bytes = tokens.map(x => parseInt(x, 16));
+                if (cursorOffset + bytes.length > fileBuffer.length) {
+                    alert(`書き込み範囲がROM末尾を超えます。\n必要: ${bytes.length} bytes / 残り: ${fileBuffer.length - cursorOffset} bytes`);
+                    return;
+                }
+                recordEditHistory();
+                for (let i = 0; i < bytes.length; i++) {
+                    const off = cursorOffset + i;
+                    if (fileBuffer[off] !== bytes[i]) modifiedOffsets.add(off);
+                    fileBuffer[off] = bytes[i];
+                }
+                hexInputNibble = 0;
+                infoFileStatus.textContent = '編集あり';
+                infoFileStatus.className = 'text-amber-400';
+                renderPage();
+                updateInspector();
+                setCursorOffset(Math.min(cursorOffset + bytes.length, fileBuffer.length - 1));
+                close();
+            };
+            ta.focus();
         }
 
         function applyHexInputChar(char) {
