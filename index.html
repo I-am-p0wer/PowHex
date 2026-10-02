@@ -205,7 +205,7 @@
             <!-- Save File -->
             <button id="downloadBtn" disabled class="flex items-center gap-1.5 px-2.5 py-1.5 bg-slate-800 hover:bg-slate-700 disabled:opacity-30 disabled:cursor-not-allowed text-slate-200 text-xs font-semibold rounded-md border border-slate-700 transition">
                 <i class="fa-solid fa-download text-xs text-emerald-400"></i>
-                <span class="hidden sm:inline">保存</span>
+                <span>保存 / 共有</span>
             </button>
 
             <!-- Sample Data -->
@@ -3700,9 +3700,31 @@ function updateSearchUI() {
             nextPageBtn.disabled = currentPage >= totalPages - 1;
         }
 
-        function downloadFile() {
+        async function downloadFile() {
             if (fileBuffer.length === 0) return;
+
             const blob = new Blob([fileBuffer], { type: 'application/octet-stream' });
+
+            // iPhone / iPad: iOSの共有シートを開く。
+            // 「ファイルに保存」を選べば、ユーザーが保存先フォルダを指定できる。
+            if (navigator.share && navigator.canShare) {
+                try {
+                    const file = new File([blob], fileName, { type: 'application/octet-stream' });
+                    if (navigator.canShare({ files: [file] })) {
+                        await navigator.share({
+                            files: [file],
+                            title: fileName
+                        });
+                        return;
+                    }
+                } catch (err) {
+                    // 共有シートをキャンセルした場合は何もしない。
+                    if (err && err.name === 'AbortError') return;
+                    console.warn('共有に失敗したため通常保存へ:', err);
+                }
+            }
+
+            // 共有API非対応環境では従来のダウンロードにフォールバック。
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
@@ -3710,7 +3732,7 @@ function updateSearchUI() {
             document.body.appendChild(a);
             a.click();
             document.body.removeChild(a);
-            URL.revokeObjectURL(url);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
 
         function formatBytes(bytes) {
