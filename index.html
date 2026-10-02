@@ -154,67 +154,7 @@
         .hex-offset-col { width: 3.5rem !important; }
         .hex-bytes-col { flex: 0 0 auto !important; justify-content: flex-start !important; gap: 3px !important; padding-left: 2px !important; padding-right: 2px !important; }
         .hex-right-col { flex: 0 0 8.5rem !important; width: 8.5rem !important; justify-content: flex-start !important; padding-left: 2px !important; padding-right: 2px !important; }
-        .hex-right-col.charmap-scroll { overflow-x: auto !important; overflow-y: hidden !important; -webkit-overflow-scrolling: touch; touch-action: pan-x; scrollbar-width: thin; }
-        .hex-right-col.charmap-scroll .charmap-row-inner { min-width: max-content; display: inline-flex; align-items: center; gap: 0.18rem; padding-right: 0.75rem; }
-        .charmap-token-touch { display: inline-flex; align-items: center; min-height: 2rem; min-width: 1.35rem; padding: 0 0.22rem !important; justify-content: center; }
-        @media (max-width: 639px) { .charmap-token-touch { min-height: 2.25rem; min-width: 1.5rem; } }
-
         @media (min-width: 640px) { .hex-right-col { flex-basis: 11rem !important; width: 11rem !important; } }
-
-        /* iPhone touch-friendly sizing: slightly larger cells/buttons without changing desktop layout. */
-        @media (max-width: 639px) and (orientation: portrait) {
-            #hexContainer { font-size: 0.82rem !important; }
-            .hex-cell {
-                min-width: 1.65rem !important;
-                width: 1.65rem !important;
-                min-height: 2rem !important;
-                line-height: 2rem !important;
-                font-size: 0.82rem !important;
-            }
-            .hex-offset-col {
-                width: 4.15rem !important;
-                font-size: 0.72rem !important;
-            }
-            .hex-right-col {
-                flex-basis: 10rem !important;
-                width: 10rem !important;
-                font-size: 0.88rem !important;
-                min-height: 2rem;
-            }
-            #hexHeaderBar { font-size: 0.72rem !important; }
-            #hexHeaderBar > * { min-height: 2rem; }
-        }
-
-        /* Landscape iPhone/iPad: use the extra width, keep the editor vertically compact. */
-        @media (orientation: landscape) and (max-height: 700px) {
-            header { height: 2.75rem !important; min-height: 2.75rem !important; }
-            #hexContainer {
-                padding-left: 0.35rem !important;
-                padding-right: 0.35rem !important;
-                padding-top: 0.25rem !important;
-                padding-bottom: 0.25rem !important;
-                font-size: 0.78rem !important;
-            }
-            #hexHeaderBar { height: 1.9rem !important; padding-left: 0.35rem !important; padding-right: 0.35rem !important; font-size: 0.68rem !important; }
-            .hex-row { padding-top: 0.1rem !important; padding-bottom: 0.1rem !important; }
-            .hex-cell {
-                min-width: 1.5rem !important;
-                width: 1.5rem !important;
-                min-height: 1.75rem !important;
-                line-height: 1.75rem !important;
-                font-size: 0.76rem !important;
-            }
-            .hex-offset-col { width: 3.8rem !important; font-size: 0.68rem !important; }
-            .hex-bytes-col { gap: 2px !important; }
-            .hex-right-col {
-                flex-basis: 13rem !important;
-                width: 13rem !important;
-                min-height: 1.75rem;
-                font-size: 0.82rem !important;
-            }
-            /* Keep the top controls usable while giving the editor more height. */
-            #hexContainer .hex-row { min-height: 1.95rem; }
-        }
 
         /* Prevent elastic bounce on iOS */
         body, html {
@@ -883,9 +823,9 @@ const searchResultList = document.getElementById('searchResultList');
             demoBtn.addEventListener('click', loadSampleData);
             emptyLoadDemoBtn.addEventListener('click', loadSampleData);
             downloadBtn.addEventListener('click', downloadFile);
+            hexPasteBtn.addEventListener('click', showHexPasteModal);
             undoBtn.addEventListener('click', undoEdit);
             redoBtn.addEventListener('click', redoEdit);
-            hexPasteBtn.addEventListener('click', showHexPasteModal);
             changeListBtn.addEventListener('click', showChangeList);
             bookmarkBtn.addEventListener('click', toggleCurrentBookmark);
             bookmarkListBtn.addEventListener('click', showBookmarkList);
@@ -1474,35 +1414,15 @@ updateSearchUI();
                 setCursorOffset(token.start);
                 return;
             }
-            // 縦画面ではMAPを横スクロールする操作と範囲選択が競合しやすい。
-            // pointerdownでは選択を開始せず、短い横スワイプはブラウザのスクロールに任せる。
+            e.preventDefault();
             clearCharmapSelectionAction();
             charmapSelectedRange = null;
-            if (charmapMapPointerState && charmapMapPointerState.timer) clearTimeout(charmapMapPointerState.timer);
             const index = tokens.indexOf(token);
-            const state = {
-                tokens,
-                startIndex: index,
-                currentIndex: index,
-                pointerId: e.pointerId,
-                active: false,
-                cancelled: false,
-                startX: e.clientX,
-                startY: e.clientY,
-                timer: null
-            };
-            state.timer = setTimeout(() => {
-                if (state.cancelled || charmapMapPointerState !== state) return;
-                state.active = true;
-                linkedRangeStart = token.start;
-                linkedRangeEnd = token.start + token.length - 1;
-                paintCharmapMapSelection(tokens, index, index);
-                syncLinkedHexVisual();
-                if (tokenEl.setPointerCapture) {
-                    try { tokenEl.setPointerCapture(e.pointerId); } catch (_) {}
-                }
-            }, 300);
-            charmapMapPointerState = state;
+            charmapMapPointerState = { tokens, startIndex: index, currentIndex: index, pointerId: e.pointerId, active: true };
+            linkedRangeStart = token.start;
+            linkedRangeEnd = token.start + token.length - 1;
+            paintCharmapMapSelection(tokens, index, index);
+            renderPage();
         }
 
         function updateCharmapMapPointerSelection(e, token) {
@@ -1537,20 +1457,7 @@ updateSearchUI();
         // iPhone/Android: 指をそのまま左右に滑らせてMAP文字を範囲選択する。
         document.addEventListener('pointermove', (e) => {
             const state = charmapMapPointerState;
-            if (!state || e.pointerId !== state.pointerId) return;
-            const dx = e.clientX - state.startX;
-            const dy = e.clientY - state.startY;
-            const moved = Math.hypot(dx, dy);
-            if (!state.active) {
-                // 横スクロールの開始を検知したら選択待ちを解除してスクロールを優先。
-                if (moved > 10) {
-                    state.cancelled = true;
-                    if (state.timer) clearTimeout(state.timer);
-                    state.timer = null;
-                    charmapMapPointerState = null;
-                }
-                return;
-            }
+            if (!state || !state.active || e.pointerId !== state.pointerId) return;
             const el = document.elementFromPoint(e.clientX, e.clientY);
             const target = el && el.closest ? el.closest('[data-map-start]') : null;
             if (!target) return;
@@ -1569,20 +1476,11 @@ updateSearchUI();
 
         document.addEventListener('pointerup', (e) => {
             if (!charmapMapPointerState || e.pointerId !== charmapMapPointerState.pointerId) return;
-            const state = charmapMapPointerState;
-            if (state.timer) clearTimeout(state.timer);
-            state.timer = null;
-            if (!state.active) {
-                charmapMapPointerState = null;
-                return;
-            }
             finishCharmapMapPointerSelection(e);
         });
 
         document.addEventListener('pointercancel', (e) => {
             if (!charmapMapPointerState || e.pointerId !== charmapMapPointerState.pointerId) return;
-            const state = charmapMapPointerState;
-            if (state.timer) clearTimeout(state.timer);
             clearCharmapMapSelectionVisual();
             charmapMapPointerState = null;
         });
@@ -2145,7 +2043,7 @@ updateSearchUI();
                 // ASCII / Charmap Column
                 const asciiGroup = document.createElement('div');
                 asciiGroup.className = hexRightDisplayMode === 'charmap'
-                    ? 'hex-right-col charmap-scroll w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400'
+                    ? 'hex-right-col w-28 sm:w-56 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal text-slate-400 overflow-hidden'
                     : 'hex-right-col w-20 sm:w-36 shrink-0 px-1 font-mono flex items-center justify-start tracking-normal sm:tracking-widest text-slate-400 overflow-hidden';
 
                 const rowCharmapTokens = hexRightDisplayMode === 'charmap'
@@ -2159,15 +2057,12 @@ updateSearchUI();
                         emptyMap.textContent = '-';
                         asciiGroup.appendChild(emptyMap);
                     } else {
-                        const charmapInner = document.createElement('div');
-                        charmapInner.className = 'charmap-row-inner';
-                        asciiGroup.appendChild(charmapInner);
                         rowCharmapTokens.forEach(token => {
                             const tokenEl = document.createElement('span');
                             const tokenActive = cursorOffset >= token.start && cursorOffset < token.start + token.length;
                             const tokenLinked = linkedRangeStart !== null && linkedRangeEnd !== null && token.start <= linkedRangeEnd && (token.start + token.length - 1) >= linkedRangeStart;
-                            tokenEl.className = 'charmap-token-touch cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : tokenLinked ? 'map-linked text-emerald-200' : 'text-emerald-300');
-                            tokenEl.style.touchAction = 'pan-x';
+                            tokenEl.className = 'cursor-pointer rounded px-0.5 whitespace-pre select-none ' + (tokenActive ? 'bg-blue-900 text-blue-200' : tokenLinked ? 'map-linked text-emerald-200' : 'text-emerald-300');
+                            tokenEl.style.touchAction = 'none';
                             tokenEl.textContent = token.text;
                             tokenEl.title = /^\[.*\]$/.test(token.text)
                                 ? 'HEX側で編集'
@@ -2179,7 +2074,7 @@ updateSearchUI();
                                 // pointerupで既に部分編集を開始しているので、通常のclickでは二重起動しない。
                                 e.preventDefault();
                             });
-                            charmapInner.appendChild(tokenEl);
+                            asciiGroup.appendChild(tokenEl);
                         });
                     }
                 }
